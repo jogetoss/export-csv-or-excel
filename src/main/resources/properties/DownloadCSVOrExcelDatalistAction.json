@@ -1,0 +1,108 @@
+[{
+  "title" : "@@datalist.downloadCSVOrExcel.config@@",
+  "properties" : [{
+    "name" : "label",
+    "label" : "@@datalist.downloadCSVOrExcel.label@@",
+    "type" : "textfield",
+    "value" : "@@datalist.downloadCSVOrExcel.download@@"
+  },
+    {
+      "name" : "formDefId",
+      "label" : "@@datalist.downloadCSVOrExcel.form@@",
+      "type" : "selectbox",
+      "options_ajax" : "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
+      "required" : "True"
+    },
+    {
+      "name" : "downloadAs",
+      "label" : "@@datalist.downloadCSVOrExcel.downloadAs@@",
+      "type" : "selectbox",
+      "options": [{
+        "value": "csv",
+        "label": "@@datalist.downloadCSVOrExcel.csv@@"
+      },
+        {
+          "value": "excel",
+          "label": "@@datalist.downloadCSVOrExcel.excel@@"
+        }],
+      "required" : "True"
+    },
+    {
+      "name" : "recordIdColumn",
+      "label" : "@@datalist.downloadCSVOrExcel.recordIdColumn@@",
+      "description" : "@@datalist.downloadCSVOrExcel.recordIdColumn.desc@@",
+      "type" : "textfield"
+    },
+    {
+      "name" : "confirmation",
+      "label" : "@@datalist.downloadCSVOrExcel.confirmationMessage@@",
+      "type" : "textfield"
+    },
+    {
+      "name" : "repeatHeaderLabel",
+      "label" : "@@datalist.downloadCSVOrExcel.repeatHeaderLabel@@",
+      "type" : "checkbox",
+      "options" : [{
+        "value" : "true",
+        "label" : ""
+      }]
+    }
+  ]
+},
+  {
+    "title" : "@@datalist.downloadCSVOrExcel.advanced@@",
+    "properties" : [{
+      "name" : "formatting",
+      "label" : "@@datalist.downloadCSVOrExcel.formatting@@",
+      "type" : "codeeditor",
+      "mode" : "css"
+    },
+      {
+        "name" : "headerHtml",
+        "label" : "@@datalist.downloadCSVOrExcel.headerHtml@@",
+        "type" : "codeeditor",
+        "mode" : "html"
+      },
+      {
+        "name" : "repeatHeader",
+        "label" : "@@datalist.downloadCSVOrExcel.repeatHeader@@",
+        "type" : "checkbox",
+        "options" : [{
+          "value" : "true",
+          "label" : ""
+        }]
+      },
+      {
+        "name" : "footerHtml",
+        "label" : "@@datalist.downloadCSVOrExcel.footerHtml@@",
+        "type" : "codeeditor",
+        "mode" : "html"
+      },
+      {
+        "name" : "repeatFooter",
+        "label" : "@@datalist.downloadCSVOrExcel.repeatFooter@@",
+        "type" : "checkbox",
+        "options" : [{
+          "value" : "true",
+          "label" : ""
+        }]
+      },
+      {
+        "name" : "hideEmptyValueField",
+        "label" : "@@datalist.downloadCSVOrExcel.hideEmptyValueField@@",
+        "type" : "checkbox",
+        "options" : [{
+          "value" : "true",
+          "label" : ""
+        }]
+      },
+      {
+        "name" : "showNotSelectedOptions",
+        "label" : "@@datalist.downloadCSVOrExcel.showNotSelectedOptions@@",
+        "type" : "checkbox",
+        "options" : [{
+          "value" : "true",
+          "label" : ""
+        }]
+      }]
+  }]
