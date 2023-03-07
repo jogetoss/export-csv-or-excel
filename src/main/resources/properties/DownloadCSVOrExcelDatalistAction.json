@@ -28,81 +28,23 @@
       "required" : "True"
     },
     {
-      "name" : "recordIdColumn",
-      "label" : "@@datalist.downloadCSVOrExcel.recordIdColumn@@",
-      "description" : "@@datalist.downloadCSVOrExcel.recordIdColumn.desc@@",
-      "type" : "textfield"
+      "name" : "footerHeader",
+      "label" : "@@datalist.downloadCSVOrExcel.footerHeader@@",
+      "type" : "selectbox",
+      "options": [{
+        "value": "false",
+        "label": "@@datalist.downloadCSVOrExcel.false@@"
+      },
+        {
+          "value": "true",
+          "label": "@@datalist.downloadCSVOrExcel.true@@"
+        }],
+      "required" : "True"
     },
     {
       "name" : "confirmation",
       "label" : "@@datalist.downloadCSVOrExcel.confirmationMessage@@",
       "type" : "textfield"
-    },
-    {
-      "name" : "repeatHeaderLabel",
-      "label" : "@@datalist.downloadCSVOrExcel.repeatHeaderLabel@@",
-      "type" : "checkbox",
-      "options" : [{
-        "value" : "true",
-        "label" : ""
-      }]
     }
   ]
-},
-  {
-    "title" : "@@datalist.downloadCSVOrExcel.advanced@@",
-    "properties" : [{
-      "name" : "formatting",
-      "label" : "@@datalist.downloadCSVOrExcel.formatting@@",
-      "type" : "codeeditor",
-      "mode" : "css"
-    },
-      {
-        "name" : "headerHtml",
-        "label" : "@@datalist.downloadCSVOrExcel.headerHtml@@",
-        "type" : "codeeditor",
-        "mode" : "html"
-      },
-      {
-        "name" : "repeatHeader",
-        "label" : "@@datalist.downloadCSVOrExcel.repeatHeader@@",
-        "type" : "checkbox",
-        "options" : [{
-          "value" : "true",
-          "label" : ""
-        }]
-      },
-      {
-        "name" : "footerHtml",
-        "label" : "@@datalist.downloadCSVOrExcel.footerHtml@@",
-        "type" : "codeeditor",
-        "mode" : "html"
-      },
-      {
-        "name" : "repeatFooter",
-        "label" : "@@datalist.downloadCSVOrExcel.repeatFooter@@",
-        "type" : "checkbox",
-        "options" : [{
-          "value" : "true",
-          "label" : ""
-        }]
-      },
-      {
-        "name" : "hideEmptyValueField",
-        "label" : "@@datalist.downloadCSVOrExcel.hideEmptyValueField@@",
-        "type" : "checkbox",
-        "options" : [{
-          "value" : "true",
-          "label" : ""
-        }]
-      },
-      {
-        "name" : "showNotSelectedOptions",
-        "label" : "@@datalist.downloadCSVOrExcel.showNotSelectedOptions@@",
-        "type" : "checkbox",
-        "options" : [{
-          "value" : "true",
-          "label" : ""
-        }]
-      }]
-  }]
+}]

@@ -90,20 +90,12 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
 
     public boolean getDownloadAs() {
         String downloadAs = getPropertyString("downloadAs");
-        if(downloadAs.equalsIgnoreCase("csv")) {
-            return true;
-        } else {
-            return false;
-        }
+        return downloadAs.equalsIgnoreCase("csv");
     }
 
-    public boolean getHeaderLabel(){
-        String downloadAs = getPropertyString("repeatHeaderLabel");
-        if(downloadAs.equalsIgnoreCase("true")) {
-            return true;
-        } else {
-            return false;
-        }
+    public boolean getFooter(){
+        String footer = getPropertyString("footerHeader");
+        return footer.equalsIgnoreCase("true");
     }
 
     @Override
@@ -177,7 +169,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                 }
             }
             if(counter == rowKeys.length) {
-                if(getHeaderLabel()) {
+                if(getFooter()) {
                     outputStream.write((headerSB +"\n").getBytes());
                 }
                 break;
@@ -230,7 +222,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                 }
             }
             if(counter == rowKeys.length) {
-                if(getHeaderLabel()) {
+                if(getFooter()) {
                     int z = 0;
                     Row dataRow = sheet.createRow(rowCounter);
                     for (String myStr : header) {
