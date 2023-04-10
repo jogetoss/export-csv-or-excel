@@ -29,7 +29,7 @@
     },
     {
       "name" : "footerHeader",
-      "label" : "@@datalist.downloadCSVOrExcel.footerHeader@@",
+      "label" : "@@datalist.downloadCSVOrExcel.footerHeaderColumn@@",
       "type" : "selectbox",
       "options": [{
         "value": "false",
@@ -45,6 +45,48 @@
       "name" : "confirmation",
       "label" : "@@datalist.downloadCSVOrExcel.confirmationMessage@@",
       "type" : "textfield"
+    },
+    {
+      "label" : "@@datalist.downloadCSVOrExcel.advancedSetting@@",
+      "type" : "header"
+    },
+    {
+      "name" : "includeCustomHeader",
+      "label" : "@@datalist.downloadCSVOrExcel.includeCustomHeader@@",
+      "type" : "selectbox",
+      "options": [{
+        "value": "false",
+        "label": "@@datalist.downloadCSVOrExcel.false@@"
+      },
+        {
+          "value": "true",
+          "label": "@@datalist.downloadCSVOrExcel.true@@"
+        }],
+      "required" : "True"
+    },
+    {
+      "name" : "headerDecorator",
+      "label" : "@@datalist.downloadCSVOrExcel.headerDecorator@@",
+      "type" : "textarea"
+    },
+    {
+      "name" : "includeCustomFooter",
+      "label" : "@@datalist.downloadCSVOrExcel.includeCustomFooter@@",
+      "type" : "selectbox",
+      "options": [{
+        "value": "false",
+        "label": "@@datalist.downloadCSVOrExcel.false@@"
+      },
+        {
+          "value": "true",
+          "label": "@@datalist.downloadCSVOrExcel.true@@"
+        }],
+      "required" : "True"
+    },
+    {
+      "name" : "footerDecorator",
+      "label" : "@@datalist.downloadCSVOrExcel.footerDecorator@@",
+      "type" : "textarea"
     }
   ]
 }]

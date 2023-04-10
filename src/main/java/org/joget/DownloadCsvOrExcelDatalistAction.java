@@ -5,6 +5,7 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.joget.apps.app.service.AppPluginUtil;
 import org.joget.apps.app.service.AppUtil;
@@ -98,6 +99,16 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         return footer.equalsIgnoreCase("true");
     }
 
+    public boolean includeCustomHeader(){
+        String header = getPropertyString("includeCustomHeader");
+        return header.equalsIgnoreCase("true");
+    }
+
+    public boolean includeCustomFooter(){
+        String footer = getPropertyString("includeCustomFooter");
+        return footer.equalsIgnoreCase("true");
+    }
+
     @Override
     public DataListActionResult executeAction(DataList dataList, String[] rowKeys) {
         // only allow POST
@@ -146,7 +157,13 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         int counter = 0;
 
         String[] res = keySB.toString().split(",", 0);
+
+        if(includeCustomHeader()){
+            outputStream.write((getPropertyString("headerDecorator")+"\n").getBytes());
+        }
         outputStream.write((headerSB +"\n").getBytes());
+
+
 
         //goes through all the datalist row
         for (int x=0; x<rows.size(); x++) {
@@ -175,6 +192,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                 break;
             }
         }
+        if(includeCustomFooter()){
+            outputStream.write((getPropertyString("footerDecorator")+"\n").getBytes());
+        }
 
         byte[] bytes = outputStream.toByteArray();
         return bytes;
@@ -195,13 +215,23 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         String[] res = keySB.toString().split(",", 0);
         String[] header = headerSB.toString().split(",", 0);
 
+        if(includeCustomHeader()){
+            Cell titleCell = headerRow.createCell(0);
+            titleCell.setCellValue(getPropertyString("headerDecorator"));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, header.length-1));
+            rowCounter+=1;
+        }
+
+        Row headerColumnRow = sheet.createRow(rowCounter);
+        counter = 0;
         for(String myStr: header) {
-            Cell headerCell = headerRow.createCell(counter);
+            Cell headerCell = headerColumnRow.createCell(counter);
             headerCell.setCellValue(myStr);
             counter += 1;
         }
-        counter = 0;
+
         rowCounter +=1;
+
 
         //goes through all the datalist row
         for (int x=0; x<rows.size(); x++) {
@@ -235,8 +265,29 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             }
         }
 
+        if(includeCustomFooter()){
+            Row footerColumnRow = sheet.createRow(rowCounter);
+            Cell titleCell = footerColumnRow.createCell(0);
+            titleCell.setCellValue(getPropertyString("footerDecorator"));
+            sheet.addMergedRegion(new CellRangeAddress(rowCounter, rowCounter, 0, header.length-1));
+        }
+
         return workbook;
 
+    }
+
+    private String getMergeRegionValue(int length) {
+        int quotient, remainder;
+        String result="";
+        quotient=length-1;
+
+        while (quotient >= 0)
+        {
+            remainder = quotient % 26;
+            result = (char)(remainder + 65) + result;
+            quotient = (int)Math.floor(quotient/26) - 1;
+        }
+        return result;
     }
 
     /**
