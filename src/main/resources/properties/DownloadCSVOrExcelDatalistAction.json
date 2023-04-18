@@ -7,13 +7,6 @@
     "value" : "@@datalist.downloadCSVOrExcel.download@@"
   },
     {
-      "name" : "formDefId",
-      "label" : "@@datalist.downloadCSVOrExcel.form@@",
-      "type" : "selectbox",
-      "options_ajax" : "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
-      "required" : "True"
-    },
-    {
       "name" : "downloadAs",
       "label" : "@@datalist.downloadCSVOrExcel.downloadAs@@",
       "type" : "selectbox",
@@ -33,11 +26,11 @@
       "type" : "selectbox",
       "options": [{
         "value": "false",
-        "label": "@@datalist.downloadCSVOrExcel.false@@"
+        "label": "@@datalist.downloadCSVOrExcel.no@@"
       },
         {
           "value": "true",
-          "label": "@@datalist.downloadCSVOrExcel.true@@"
+          "label": "@@datalist.downloadCSVOrExcel.yes@@"
         }],
       "required" : "True"
     },
@@ -56,17 +49,19 @@
       "type" : "selectbox",
       "options": [{
         "value": "false",
-        "label": "@@datalist.downloadCSVOrExcel.false@@"
+        "label": "@@datalist.downloadCSVOrExcel.no@@"
       },
         {
           "value": "true",
-          "label": "@@datalist.downloadCSVOrExcel.true@@"
+          "label": "@@datalist.downloadCSVOrExcel.yes@@"
         }],
       "required" : "True"
     },
     {
       "name" : "headerDecorator",
       "label" : "@@datalist.downloadCSVOrExcel.headerDecorator@@",
+      "control_field": "includeCustomHeader",
+      "control_value": "true",
       "type" : "textarea"
     },
     {
@@ -75,17 +70,19 @@
       "type" : "selectbox",
       "options": [{
         "value": "false",
-        "label": "@@datalist.downloadCSVOrExcel.false@@"
+        "label": "@@datalist.downloadCSVOrExcel.no@@"
       },
         {
           "value": "true",
-          "label": "@@datalist.downloadCSVOrExcel.true@@"
+          "label": "@@datalist.downloadCSVOrExcel.yes@@"
         }],
       "required" : "True"
     },
     {
       "name" : "footerDecorator",
       "label" : "@@datalist.downloadCSVOrExcel.footerDecorator@@",
+      "control_field": "includeCustomFooter",
+      "control_value": "true",
       "type" : "textarea"
     }
   ]

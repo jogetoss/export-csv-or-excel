@@ -5,7 +5,7 @@
     <artifactId>export_csv_or_excel</artifactId>
     <packaging>bundle</packaging>
     <version>8.0-SNAPSHOT</version>
-    <name>export_csv_or_excel</name>
+    <name>export-csv-or-excel</name>
     <url>http://www.joget.org</url>
     <build>
         <plugins>

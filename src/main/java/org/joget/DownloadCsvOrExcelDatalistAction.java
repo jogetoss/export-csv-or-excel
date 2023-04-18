@@ -185,7 +185,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     outputStream.write("\n".getBytes());
                 }
             }
-            if(counter == rowKeys.length) {
+            if(counter == rows.size()) {
                 if(getFooter()) {
                     outputStream.write((headerSB +"\n").getBytes());
                 }
@@ -217,7 +217,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
 
         if(includeCustomHeader()){
             Cell titleCell = headerRow.createCell(0);
-            titleCell.setCellValue(getPropertyString("headerDecorator"));
+            String headerString = getPropertyString("headerDecorator");
+            titleCell.setCellValue(headerString);
+            int getNewLine = headerString.split("\r\n|\r|\n").length;
+            headerRow.setHeightInPoints((getNewLine * sheet.getDefaultRowHeightInPoints()));
+            sheet.autoSizeColumn(2);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, header.length-1));
             rowCounter+=1;
         }
@@ -231,6 +235,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         }
 
         rowCounter +=1;
+        counter = 0;
 
 
         //goes through all the datalist row
@@ -251,7 +256,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     rowCounter+=1;
                 }
             }
-            if(counter == rowKeys.length) {
+            if(counter == rows.size()) {
                 if(getFooter()) {
                     int z = 0;
                     Row dataRow = sheet.createRow(rowCounter);
@@ -260,6 +265,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                         footerCell.setCellValue(myStr);
                         z += 1;
                     }
+                    rowCounter+=1;
                 }
                 break;
             }
@@ -274,20 +280,6 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
 
         return workbook;
 
-    }
-
-    private String getMergeRegionValue(int length) {
-        int quotient, remainder;
-        String result="";
-        quotient=length-1;
-
-        while (quotient >= 0)
-        {
-            remainder = quotient % 26;
-            result = (char)(remainder + 65) + result;
-            quotient = (int)Math.floor(quotient/26) - 1;
-        }
-        return result;
     }
 
     /**
