@@ -140,12 +140,14 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
 
     protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, String[] rowKeys) throws ServletException, IOException {
         byte[] bytes = getCSV(dataList, rowKeys);
-        writeResponse(request, response, bytes, "report.csv", "text/csv");
+        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" :"report.csv";
+        writeResponse(request, response, bytes, filename, "text/csv");
     }
 
     protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, String[] rowKeys) throws ServletException, IOException {
         Workbook workbook = getExcel(dataList, rowKeys);
-        writeResponseExcel(request, response, workbook, "report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
+        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" :"report.xlsx";
+        writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
 
     protected byte[] getCSV(DataList dataList, String[] rowKeys) throws IOException {
@@ -185,12 +187,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     outputStream.write("\n".getBytes());
                 }
             }
-            if(counter == rows.size()) {
-                if(getFooter()) {
-                    outputStream.write((headerSB +"\n").getBytes());
-                }
-                break;
-            }
+        }
+        if(getFooter()) {
+            outputStream.write((headerSB +"\n").getBytes());
         }
         if(includeCustomFooter()){
             outputStream.write((getPropertyString("footerDecorator")+"\n").getBytes());
@@ -256,19 +255,16 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     rowCounter+=1;
                 }
             }
-            if(counter == rows.size()) {
-                if(getFooter()) {
-                    int z = 0;
-                    Row dataRow = sheet.createRow(rowCounter);
-                    for (String myStr : header) {
-                        Cell footerCell = dataRow.createCell(z);
-                        footerCell.setCellValue(myStr);
-                        z += 1;
-                    }
-                    rowCounter+=1;
-                }
-                break;
+        }
+        if(getFooter()) {
+            int z = 0;
+            Row dataRow = sheet.createRow(rowCounter);
+            for (String myStr : header) {
+                Cell footerCell = dataRow.createCell(z);
+                footerCell.setCellValue(myStr);
+                z += 1;
             }
+            rowCounter+=1;
         }
 
         if(includeCustomFooter()){

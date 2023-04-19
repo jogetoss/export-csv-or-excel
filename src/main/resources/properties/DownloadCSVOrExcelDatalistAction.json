@@ -84,6 +84,31 @@
       "control_field": "includeCustomFooter",
       "control_value": "true",
       "type" : "textarea"
+    },
+    {
+      "label" : "@@datalist.downloadCSVOrExcel.fileSetting@@",
+      "type" : "header"
+    },
+    {
+      "name" : "renameFile",
+      "label" : "@@datalist.downloadCSVOrExcel.renameFile@@",
+      "type" : "selectbox",
+      "options": [{
+        "value": "false",
+        "label": "@@datalist.downloadCSVOrExcel.no@@"
+      },
+        {
+          "value": "true",
+          "label": "@@datalist.downloadCSVOrExcel.yes@@"
+        }],
+      "required" : "True"
+    },
+    {
+      "name" : "filename",
+      "label" : "@@datalist.downloadCSVOrExcel.filename@@",
+      "control_field": "renameFile",
+      "control_value": "true",
+      "type" : "textfield"
     }
   ]
 }]
