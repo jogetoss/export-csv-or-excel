@@ -1,4 +1,4 @@
-package org.joget;
+package org.joget.marketplace;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.poi.ss.usermodel.Cell;
