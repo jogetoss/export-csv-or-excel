@@ -16,10 +16,8 @@ import org.joget.apps.datalist.model.DataListActionDefault;
 import org.joget.apps.datalist.model.DataListActionResult;
 import org.joget.apps.datalist.model.DataListCollection;
 import org.joget.apps.datalist.service.DataListService;
-
 import org.joget.commons.util.LogUtil;
 import org.joget.workflow.util.WorkflowUtil;
-
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -29,6 +27,8 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Collection;
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.poi.ss.usermodel.CellType;
 
 
 public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
@@ -272,7 +272,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                         for(String myStr: res) {
                             String value = getBinderFormattedValue(dataList,row,myStr);
                             Cell dataRowCell = dataRow.createCell(z);
-                            dataRowCell.setCellValue(value);
+                            if( NumberUtils.isParsable(value) ){
+                                dataRowCell.setCellValue(Double.parseDouble(value));
+                            }else{
+                                dataRowCell.setCellValue(value);
+                            }
                             z += 1;
                         }
                         rowCounter+=1;
@@ -294,7 +298,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                 for(String myStr: res) {
                     String value = getBinderFormattedValue(dataList,row,myStr);
                     Cell dataRowCell = dataRow.createCell(z);
-                    dataRowCell.setCellValue(value);
+                    if( NumberUtils.isParsable(value) ){
+                        dataRowCell.setCellValue(Double.parseDouble(value));
+                    }else{
+                        dataRowCell.setCellValue(value);
+                    }
                     z += 1;
                 }
                 rowCounter+=1;
