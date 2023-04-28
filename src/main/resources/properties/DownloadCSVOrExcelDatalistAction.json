@@ -86,6 +86,21 @@
                 "type": "textarea"
             },
             {
+                "name": "downloadAllWhenNoneSelected",
+                "label": "@@datalist.downloadCSVOrExcel.downloadAllWhenNoneSelected@@",
+                "description": "@@datalist.downloadCSVOrExcel.downloadAllWhenNoneSelected.desc@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },
@@ -109,21 +124,6 @@
                 "control_field": "renameFile",
                 "control_value": "true",
                 "type": "textfield"
-            },
-            {
-                "name": "downloadAllWhenNoneSelected",
-                "label": "@@datalist.downloadCSVOrExcel.downloadAllWhenNoneSelected@@",
-                "description": "@@datalist.downloadCSVOrExcel.downloadAllWhenNoneSelected.desc@@",
-                "type": "selectbox",
-                "options": [{
-                        "value": "false",
-                        "label": "@@datalist.downloadCSVOrExcel.no@@"
-                    },
-                    {
-                        "value": "true",
-                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
-                    }],
-                "required": "True"
             }
         ]
     }]
