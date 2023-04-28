@@ -165,47 +165,50 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         outputStream.write((headerSB +"\n").getBytes());
 
             
-            if(rowKeys != null && rowKeys.length > 0){
-                
-                //goes through all the datalist row
-                for (int x=0; x<rows.size(); x++) {
-                    //compare with all the rowkeys that have been selected
-                    for (int y=0; y<rowKeys.length; y++) {
-                        if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
-                            HashMap row = (HashMap) rows.get(x);
-                            //get the keys and save it
-                            for(String myStr: res) {
-                                String value = getBinderFormattedValue(dataList,row,myStr);
-                                outputStream.write(value.getBytes());
-                                outputStream.write(",".getBytes());
-                            }
-                            String outputString = new String(outputStream.toByteArray());
-                            outputString = outputString.substring(0, outputString.length() - 1);
-                            outputStream.reset();
-                            outputStream.write(outputString.getBytes());
-                            outputStream.write("\n".getBytes());
-                        }
-                    }
-                }
+        if(rowKeys != null && rowKeys.length > 0){
 
-            }else if(getProperty("downloadAllWhenNoneSelected").equals("true")){
-                
-                //goes through all the datalist row
-                for (int x=0; x<rows.size(); x++) {
-                    HashMap row = (HashMap) rows.get(x);
-                    //get the keys and save it
-                    for(String myStr: res) {
-                        String value = getBinderFormattedValue(dataList,row,myStr);
-                        outputStream.write(value.getBytes());
-                        outputStream.write(",".getBytes());
+            //goes through all the datalist row
+            for (int x=0; x<rows.size(); x++) {
+                //compare with all the rowkeys that have been selected
+                for (int y=0; y<rowKeys.length; y++) {
+                    if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
+                        HashMap row = (HashMap) rows.get(x);
+                        //get the keys and save it
+                        for(String myStr: res) {
+                            String value = getBinderFormattedValue(dataList,row,myStr);
+                            outputStream.write(value.getBytes());
+                            outputStream.write(",".getBytes());
+                        }
+                        String outputString = new String(outputStream.toByteArray());
+                        outputString = outputString.substring(0, outputString.length() - 1);
+                        outputStream.reset();
+                        outputStream.write(outputString.getBytes());
+                        outputStream.write("\n".getBytes());
                     }
-                    String outputString = new String(outputStream.toByteArray());
-                    outputString = outputString.substring(0, outputString.length() - 1);
-                    outputStream.reset();
-                    outputStream.write(outputString.getBytes());
-                    outputStream.write("\n".getBytes());
                 }
             }
+
+        }else if(getProperty("downloadAllWhenNoneSelected").equals("true")){
+
+            //retrieve all rows
+            rows = dataList.getRows(0,0);
+
+            //goes through all the datalist row
+            for (int x=0; x<rows.size(); x++) {
+                HashMap row = (HashMap) rows.get(x);
+                //get the keys and save it
+                for(String myStr: res) {
+                    String value = getBinderFormattedValue(dataList,row,myStr);
+                    outputStream.write(value.getBytes());
+                    outputStream.write(",".getBytes());
+                }
+                String outputString = new String(outputStream.toByteArray());
+                outputString = outputString.substring(0, outputString.length() - 1);
+                outputStream.reset();
+                outputStream.write(outputString.getBytes());
+                outputStream.write("\n".getBytes());
+            }
+        }
         
         if(getFooter()) {
             outputStream.write((headerSB +"\n").getBytes());
@@ -278,6 +281,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             }
             
         }else if(getProperty("downloadAllWhenNoneSelected").equals("true")){
+            
+            //retrieve all rows
+            rows = dataList.getRows(0,0);
             
             //goes through all the datalist row
             for (int x=0; x<rows.size(); x++) {
