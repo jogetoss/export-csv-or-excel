@@ -118,7 +118,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         }
 
         // check for submited rows
-        if (rowKeys != null && rowKeys.length > 0) {
+        if ( (rowKeys != null && rowKeys.length > 0) || getProperty("downloadAllWhenNoneSelected").equals("true") ) {
             try {
                 //get the HTTP Response
                 HttpServletResponse response = WorkflowUtil.getHttpServletResponse();
@@ -156,7 +156,6 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
-        int counter = 0;
 
         String[] res = keySB.toString().split(",", 0);
 
@@ -165,14 +164,34 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         }
         outputStream.write((headerSB +"\n").getBytes());
 
+            
+            if(rowKeys != null && rowKeys.length > 0){
+                
+                //goes through all the datalist row
+                for (int x=0; x<rows.size(); x++) {
+                    //compare with all the rowkeys that have been selected
+                    for (int y=0; y<rowKeys.length; y++) {
+                        if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
+                            HashMap row = (HashMap) rows.get(x);
+                            //get the keys and save it
+                            for(String myStr: res) {
+                                String value = getBinderFormattedValue(dataList,row,myStr);
+                                outputStream.write(value.getBytes());
+                                outputStream.write(",".getBytes());
+                            }
+                            String outputString = new String(outputStream.toByteArray());
+                            outputString = outputString.substring(0, outputString.length() - 1);
+                            outputStream.reset();
+                            outputStream.write(outputString.getBytes());
+                            outputStream.write("\n".getBytes());
+                        }
+                    }
+                }
 
-
-        //goes through all the datalist row
-        for (int x=0; x<rows.size(); x++) {
-            //compare with all the rowkeys that have been selected
-            for (int y=0; y<rowKeys.length; y++) {
-                if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
-                    counter += 1;
+            }else if(getProperty("downloadAllWhenNoneSelected").equals("true")){
+                
+                //goes through all the datalist row
+                for (int x=0; x<rows.size(); x++) {
                     HashMap row = (HashMap) rows.get(x);
                     //get the keys and save it
                     for(String myStr: res) {
@@ -187,7 +206,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     outputStream.write("\n".getBytes());
                 }
             }
-        }
+        
         if(getFooter()) {
             outputStream.write((headerSB +"\n").getBytes());
         }
@@ -236,26 +255,46 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         rowCounter +=1;
         counter = 0;
 
-
-        //goes through all the datalist row
-        for (int x=0; x<rows.size(); x++) {
-            //compare with all the rowkeys that have been selected
-            for (int y=0; y<rowKeys.length; y++) {
-                Row dataRow = sheet.createRow(rowCounter);
-                if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
-                    counter += 1;
-                    HashMap row = (HashMap) rows.get(x);
-                    int z = 0;
-                    for(String myStr: res) {
-                        String value = getBinderFormattedValue(dataList,row,myStr);
-                        Cell dataRowCell = dataRow.createCell(z);
-                        dataRowCell.setCellValue(value);
-                        z += 1;
+        if(rowKeys != null && rowKeys.length > 0){
+            
+            //goes through all the datalist row
+            for (int x=0; x<rows.size(); x++) {
+                //compare with all the rowkeys that have been selected
+                for (int y=0; y<rowKeys.length; y++) {
+                    Row dataRow = sheet.createRow(rowCounter);
+                    if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
+                        counter += 1;
+                        HashMap row = (HashMap) rows.get(x);
+                        int z = 0;
+                        for(String myStr: res) {
+                            String value = getBinderFormattedValue(dataList,row,myStr);
+                            Cell dataRowCell = dataRow.createCell(z);
+                            dataRowCell.setCellValue(value);
+                            z += 1;
+                        }
+                        rowCounter+=1;
                     }
-                    rowCounter+=1;
                 }
             }
+            
+        }else if(getProperty("downloadAllWhenNoneSelected").equals("true")){
+            
+            //goes through all the datalist row
+            for (int x=0; x<rows.size(); x++) {
+                Row dataRow = sheet.createRow(rowCounter);
+                counter += 1;
+                HashMap row = (HashMap) rows.get(x);
+                int z = 0;
+                for(String myStr: res) {
+                    String value = getBinderFormattedValue(dataList,row,myStr);
+                    Cell dataRowCell = dataRow.createCell(z);
+                    dataRowCell.setCellValue(value);
+                    z += 1;
+                }
+                rowCounter+=1;
+            }
         }
+        
         if(getFooter()) {
             int z = 0;
             Row dataRow = sheet.createRow(rowCounter);
