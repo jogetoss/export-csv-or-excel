@@ -16,6 +16,7 @@ import org.joget.apps.datalist.model.DataListActionDefault;
 import org.joget.apps.datalist.model.DataListActionResult;
 import org.joget.apps.datalist.model.DataListCollection;
 import org.joget.apps.datalist.service.DataListService;
+import org.joget.apps.form.model.FormRow;
 import org.joget.commons.util.LogUtil;
 import org.joget.workflow.util.WorkflowUtil;
 import javax.servlet.ServletException;
@@ -28,7 +29,6 @@ import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Collection;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.poi.ss.usermodel.CellType;
 
 
 public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
@@ -171,20 +171,19 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             for (int x=0; x<rows.size(); x++) {
                 //compare with all the rowkeys that have been selected
                 for (int y=0; y<rowKeys.length; y++) {
-                    if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
-                        HashMap row = (HashMap) rows.get(x);
-                        //get the keys and save it
-                        for(String myStr: res) {
-                            String value = getBinderFormattedValue(dataList,row,myStr);
-                            outputStream.write(value.getBytes());
-                            outputStream.write(",".getBytes());
-                        }
-                        String outputString = new String(outputStream.toByteArray());
-                        outputString = outputString.substring(0, outputString.length() - 1);
-                        outputStream.reset();
-                        outputStream.write(outputString.getBytes());
-                        outputStream.write("\n".getBytes());
+                    //check instance of HashMap if not it will be Formrow
+                    boolean boolInstance = rows.get(x) instanceof HashMap;
+                    boolean foundRowKey = foundRowKey(boolInstance,rows,x,rowKeys[y]);
+
+                    //if no row is found skip
+                    if(!foundRowKey) {
+                        continue;
                     }
+
+                    Object row = getRow(rows,x);
+
+                    //get the keys and save it
+                    printCSV(dataList, outputStream, res, row);
                 }
             }
 
@@ -195,18 +194,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
 
             //goes through all the datalist row
             for (int x=0; x<rows.size(); x++) {
-                HashMap row = (HashMap) rows.get(x);
+                Object row = getRow(rows,x);
                 //get the keys and save it
-                for(String myStr: res) {
-                    String value = getBinderFormattedValue(dataList,row,myStr);
-                    outputStream.write(value.getBytes());
-                    outputStream.write(",".getBytes());
-                }
-                String outputString = new String(outputStream.toByteArray());
-                outputString = outputString.substring(0, outputString.length() - 1);
-                outputStream.reset();
-                outputStream.write(outputString.getBytes());
-                outputStream.write("\n".getBytes());
+                printCSV(dataList, outputStream, res, row);
             }
         }
         
@@ -264,23 +254,17 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             for (int x=0; x<rows.size(); x++) {
                 //compare with all the rowkeys that have been selected
                 for (int y=0; y<rowKeys.length; y++) {
-                    Row dataRow = sheet.createRow(rowCounter);
-                    if(((HashMap) rows.get(x)).get("id").equals(rowKeys[y])) {
-                        counter += 1;
-                        HashMap row = (HashMap) rows.get(x);
-                        int z = 0;
-                        for(String myStr: res) {
-                            String value = getBinderFormattedValue(dataList,row,myStr);
-                            Cell dataRowCell = dataRow.createCell(z);
-                            if( NumberUtils.isParsable(value) ){
-                                dataRowCell.setCellValue(Double.parseDouble(value));
-                            }else{
-                                dataRowCell.setCellValue(value);
-                            }
-                            z += 1;
-                        }
-                        rowCounter+=1;
+                    boolean boolInstance = rows.get(x) instanceof HashMap;
+                    boolean foundRowKey = foundRowKey(boolInstance,rows,x,rowKeys[y]);
+
+                    if(!foundRowKey) {
+                        continue;
                     }
+
+                    printExcel(sheet,rowCounter,counter,rows,x,res,dataList);
+                    counter += 1;
+                    rowCounter+=1;
+
                 }
             }
             
@@ -288,23 +272,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             
             //retrieve all rows
             rows = dataList.getRows(0,0);
-            
+
             //goes through all the datalist row
             for (int x=0; x<rows.size(); x++) {
-                Row dataRow = sheet.createRow(rowCounter);
+                printExcel(sheet,rowCounter,counter,rows,x,res,dataList);
                 counter += 1;
-                HashMap row = (HashMap) rows.get(x);
-                int z = 0;
-                for(String myStr: res) {
-                    String value = getBinderFormattedValue(dataList,row,myStr);
-                    Cell dataRowCell = dataRow.createCell(z);
-                    if( NumberUtils.isParsable(value) ){
-                        dataRowCell.setCellValue(Double.parseDouble(value));
-                    }else{
-                        dataRowCell.setCellValue(value);
-                    }
-                    z += 1;
-                }
                 rowCounter+=1;
             }
         }
@@ -429,5 +401,47 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         sb.put("header", headerSB);
         sb.put("key", keySB);
         return sb;
+    }
+
+
+    private void printCSV(DataList dataList, ByteArrayOutputStream outputStream, String[] res, Object row) throws IOException {
+        for(String myStr: res) {
+            String value = getBinderFormattedValue(dataList,row,myStr);
+            outputStream.write(value.getBytes());
+            outputStream.write(",".getBytes());
+        }
+        String outputString = new String(outputStream.toByteArray());
+        outputString = outputString.substring(0, outputString.length() - 1);
+        outputStream.reset();
+        outputStream.write(outputString.getBytes());
+        outputStream.write("\n".getBytes());
+    }
+
+    private void printExcel(Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList) {
+        Row dataRow = sheet.createRow(rowCounter);
+        Object row = getRow(rows,x);
+        int z = 0;
+        for(String myStr: res) {
+            String value = getBinderFormattedValue(dataList,row,myStr);
+            Cell dataRowCell = dataRow.createCell(z);
+            if( NumberUtils.isParsable(value) ){
+                dataRowCell.setCellValue(Double.parseDouble(value));
+            }else{
+                dataRowCell.setCellValue(value);
+            }
+            z += 1;
+        }
+    }
+
+    private Object getRow(DataListCollection rows, int x) {
+        return rows.get(x);
+    }
+
+    private boolean foundRowKey(boolean boolInstance, DataListCollection rows, int x, String rowKey) {
+        if(boolInstance) {
+            return ((HashMap) rows.get(x)).get("id").equals(rowKey);
+        } else {
+            return ((FormRow) rows.get(x)).get("id").equals(rowKey);
+        }
     }
 }
