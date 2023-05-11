@@ -28,10 +28,15 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.commons.lang3.math.NumberUtils;
 
 
 public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
+
+    private final DuplicateAndSkip duplicates = new DuplicateAndSkip();
 
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
@@ -158,6 +163,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         StringBuilder headerSB = sb.get("header");
 
         String[] res = keySB.toString().split(",", 0);
+        duplicates.setMap(findDuplicate(res));
 
         if(includeCustomHeader()){
             outputStream.write((getPropertyString("headerDecorator")+"\n").getBytes());
@@ -170,17 +176,17 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             //goes through all the datalist row
             for (int x=0; x<rows.size(); x++) {
                 //compare with all the rowkeys that have been selected
-                for (int y=0; y<rowKeys.length; y++) {
+                for (String rowKey : rowKeys) {
                     //check instance of HashMap if not it will be Formrow
                     boolean boolInstance = rows.get(x) instanceof HashMap;
-                    boolean foundRowKey = foundRowKey(boolInstance,rows,x,rowKeys[y]);
+                    boolean foundRowKey = foundRowKey(boolInstance, rows, x, rowKey);
 
                     //if no row is found skip
-                    if(!foundRowKey) {
+                    if (!foundRowKey) {
                         continue;
                     }
 
-                    Object row = getRow(rows,x);
+                    Object row = getRow(rows, x);
 
                     //get the keys and save it
                     printCSV(dataList, outputStream, res, row);
@@ -207,8 +213,25 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             outputStream.write((getPropertyString("footerDecorator")+"\n").getBytes());
         }
 
-        byte[] bytes = outputStream.toByteArray();
-        return bytes;
+        return outputStream.toByteArray();
+    }
+
+    private HashMap<String, Integer> findDuplicate(String[] keySB) {
+        Set<String> seen = new HashSet<>();
+        HashMap<String, Integer> duplicates = new HashMap<>();
+
+        for (String str : keySB) {
+            if (seen.contains(str)) {
+                if (!duplicates.containsKey(str)) {
+                    duplicates.put(str, 1);
+                } else {
+                    duplicates.put(str, duplicates.get(str) + 1);
+                }
+            } else {
+                seen.add(str);
+            }
+        }
+        return duplicates;
     }
 
     protected Workbook getExcel(DataList dataList, String[] rowKeys) {
@@ -225,6 +248,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         Row headerRow = sheet.createRow(rowCounter);
         String[] res = keySB.toString().split(",", 0);
         String[] header = headerSB.toString().split(",", 0);
+        duplicates.setMap(findDuplicate(res));
 
         if(includeCustomHeader()){
             Cell titleCell = headerRow.createCell(0);
@@ -355,9 +379,20 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
 
     protected String getBinderFormattedValue(DataList dataList, Object o, String name){
         DataListColumn[] columns = dataList.getColumns();
-
+        int skip = duplicates.getSkipCount(name);
         for (DataListColumn c : columns) {
             if(c.getName().equalsIgnoreCase(name)){
+
+                if(duplicates.checkKey(name)) {
+                    if(duplicates.skipCountLessThenDuplicate(name)) {
+                        duplicates.addSkipCount(name);
+                    }
+                    if(skip != 0) {
+                        skip -= 1;
+                        continue;
+                    }
+                }
+
                 String value;
                 try{
                     value = DataListService.evaluateColumnValueFromRow(o, name).toString();
@@ -366,7 +401,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                         for (DataListColumnFormat f : formats) {
                             if (f != null) {
                                 value = f.format(dataList, c, o, value);
-                                return value;
+                                String stripHTML = value.replaceAll("<[^>]*>", "");
+                                return stripHTML;
                             }else{
                                 return value;
                             }
@@ -387,7 +423,6 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         StringBuilder headerSB = new StringBuilder();
         StringBuilder keySB = new StringBuilder();
 
-        int counter = 0;
         for (DataListColumn column : dataList.getColumns()) {
             String header = column.getLabel();
             String key = column.getName();
