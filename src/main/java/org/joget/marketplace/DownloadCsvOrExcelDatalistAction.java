@@ -442,7 +442,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
     private void printCSV(DataList dataList, ByteArrayOutputStream outputStream, String[] res, Object row) throws IOException {
         for(String myStr: res) {
             String value = getBinderFormattedValue(dataList,row,myStr);
-            outputStream.write(value.getBytes());
+
+            outputStream.write(value.trim().getBytes());
             outputStream.write(",".getBytes());
         }
         String outputString = new String(outputStream.toByteArray());
