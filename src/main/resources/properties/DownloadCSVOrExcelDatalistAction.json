@@ -21,6 +21,14 @@
                 "required": "True"
             },
             {
+                "name": "delimiter",
+                "label": "@@datalist.downloadCSVOrExcel.delimiter@@",
+                "control_field": "downloadAs",
+                "control_value": "csv",
+                "type": "textfield",
+                "value": ";"
+            },
+            {
                 "name": "footerHeader",
                 "label": "@@datalist.downloadCSVOrExcel.footerHeaderColumn@@",
                 "type": "selectbox",
@@ -124,6 +132,22 @@
                 "control_field": "renameFile",
                 "control_value": "true",
                 "type": "textfield"
+            },
+            {
+                "name": "largfiles",
+                "label": "@@datalist.downloadCSVOrExcel.largfiles@@",
+                "control_field": "downloadAs",
+                "control_value": "excel",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }
+                ]
             }
         ]
     }]

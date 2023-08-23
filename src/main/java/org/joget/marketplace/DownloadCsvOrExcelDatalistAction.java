@@ -23,65 +23,90 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.apache.commons.lang3.math.NumberUtils;
+import org.joget.apps.app.model.AppDefinition;
+import static org.joget.commons.util.FileManager.getBaseDirectory;
+import org.joget.commons.util.PluginThread;
+import org.joget.plugin.base.PluginWebSupport;
+import org.joget.workflow.model.service.WorkflowUserManager;
 
-public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
+public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault implements PluginWebSupport {
 
     private final DuplicateAndSkip duplicates = new DuplicateAndSkip();
 
+    private static Map<String, Object> data;
+
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
+    
+    @Override
     public String getName() {
         return "Download CSV or Excel Datalist Action";
     }
 
+    @Override
     public String getVersion() {
-        return "8.0.1";
+        return "8.0.2";
     }
 
+    @Override
     public String getClassName() {
         return getClass().getName();
     }
 
+    @Override
     public String getLabel() {
         //support i18n
         return AppPluginUtil.getMessage("org.joget.DownloadCSVOrExcelDatalistAction.pluginLabel", getClassName(), MESSAGE_PATH);
     }
 
+    @Override
     public String getDescription() {
         //support i18n
         return AppPluginUtil.getMessage("org.joget.DownloadCSVOrExcelDatalistAction.pluginDesc", getClassName(), MESSAGE_PATH);
     }
 
+    @Override
     public String getPropertyOptions() {
         return AppUtil.readPluginResource(getClassName(), "/properties/DownloadCSVOrExcelDatalistAction.json", null, true, MESSAGE_PATH);
     }
 
+    @Override
     public String getLinkLabel() {
         return getPropertyString("label"); //get label from configured properties options
     }
 
+    @Override
     public String getHref() {
         return getPropertyString("href"); //Let system to handle to post to the same page
     }
 
+    @Override
     public String getTarget() {
         return "post";
     }
 
+    @Override
     public String getHrefParam() {
         return getPropertyString("hrefParam");  //Let system to set the parameter to the checkbox name
     }
 
+    @Override
     public String getHrefColumn() {
         String recordIdColumn = getPropertyString("recordIdColumn"); //get column id from configured properties options
         if ("id".equalsIgnoreCase(recordIdColumn) || recordIdColumn.isEmpty()) {
@@ -118,11 +143,12 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
     @Override
     public DataListActionResult executeAction(DataList dataList, String[] rowKeys) {
         // only allow POST
+        DataListActionResult result = new DataListActionResult();
+        result.setType(DataListActionResult.TYPE_REDIRECT);
         HttpServletRequest request = WorkflowUtil.getHttpServletRequest();
         if (request != null && !"POST".equalsIgnoreCase(request.getMethod())) {
             return null;
         }
-
         // check for submited rows
         if ((rowKeys != null && rowKeys.length > 0) || getProperty("downloadAllWhenNoneSelected").equals("true")) {
             try {
@@ -131,7 +157,40 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                 if (getDownloadAs()) {
                     downloadCSV(request, response, dataList, rowKeys);
                 } else {
-                    downloadExcel(request, response, dataList, rowKeys);
+                    String largfiles = getPropertyString("largfiles");
+                    if ("true".equalsIgnoreCase(largfiles) && rowKeys == null ) {
+                        DataListCollection rows = dataList.getRows();
+                        String uniqueId = UUID.randomUUID().toString();
+                        String excelFileName = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
+                        String filePath = uniqueId + File.separator + excelFileName;
+                        File excelFolder = new File(getBaseDirectory(), uniqueId);
+                        if (!excelFolder.isDirectory()) {
+                            //create directories if not exist
+                            new File(getBaseDirectory(), uniqueId).mkdirs();
+                        }
+                        
+                        Thread excelDownloadThread = new PluginThread(new Runnable() {
+                            public void run() {
+                                Workbook workbook = getExcel(dataList, rows, rowKeys);
+                                String filePath = excelFolder.getPath() + File.separator + excelFileName;
+                                try ( FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                                    workbook.write(fileOut);
+
+                                } catch (IOException e) {
+                                    LogUtil.error(getClassName(), e, e.getMessage());
+                                }
+                            }
+                        });
+                        
+                        excelDownloadThread.setDaemon(true);
+                        excelDownloadThread.start();
+
+                        AppDefinition appDef = AppUtil.getCurrentAppDefinition();
+                        String url = "/jw/web/json/app/" + appDef.getAppId() + "/" + appDef.getVersion() + "/plugin/org.joget.marketplace.DownloadCsvOrExcelDatalistAction/service?uniqueId=" + uniqueId + "&filename=" + excelFileName;
+                        result.setUrl(url);
+                    } else {
+                        getExcel(dataList, dataList.getRows(), rowKeys);
+                    }
                 }
             } catch (ServletException e) {
                 LogUtil.error(getClassName(), e, "Fail to generate Excel or CSV for " + ArrayUtils.toString(rowKeys));
@@ -139,33 +198,96 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                 throw new RuntimeException(e);
             }
         }
-        return null;
+        return result;
+    }
+
+    @Override
+    public void webService(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        
+        boolean roleAnonymous = WorkflowUtil.isCurrentUserInRole(WorkflowUserManager.ROLE_ANONYMOUS);
+        if(roleAnonymous) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+        
+        String uniqueId = request.getParameter("uniqueId");
+        String filename = request.getParameter("filename");
+        if (uniqueId != null && !uniqueId.isEmpty()) {
+            if (filename != null && !filename.isEmpty()) {
+                // check for the flag file
+
+                String path = getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
+                boolean fileGenerated = checkCompletionFlag(path);
+                if (fileGenerated) {
+                    File file = new File(path);
+                    response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
+                    OutputStream outputStream;
+                    try ( InputStream inputStream = new FileInputStream(file)) {
+                        outputStream = response.getOutputStream();
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = inputStream.read(buffer)) != -1) {
+                            outputStream.write(buffer, 0, bytesRead);
+                            outputStream.flush();
+                        }
+                    }
+                    outputStream.close();
+                } else {
+                    String javascript = "<h4>Please wait while the file is being generated...</h4>"
+                            + "<script>\n"
+                            + "  setTimeout(function() {\n"
+                            + "    location.reload();\n"
+                            + "  }, 5000); // Reload after 5 seconds\n"
+                            + "</script>";
+
+                    response.setContentType("text/html");
+                    response.setCharacterEncoding("UTF-8");
+                    try {
+                        response.getWriter().write(javascript);
+                        response.flushBuffer();
+                    } catch (IOException ex) {
+                        LogUtil.error(getClassName(), ex, ex.getMessage());
+                    }
+                }
+
+            }
+        }
+    }
+
+    private boolean checkCompletionFlag(String path) {
+        //File flagFile = new File(path + "/completion.flag");
+        File flagFile = new File(path);
+        return flagFile.exists();
     }
 
     protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, String[] rowKeys) throws ServletException, IOException {
 
         String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
-
+        String delimiter = getPropertyString("delimiter");
+        if(delimiter.isEmpty()) {
+            delimiter = ";";
+        }
         response.setContentType("text/csv");
         response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
 
         try ( OutputStream outputStream = response.getOutputStream()) {
             PrintWriter writer = new PrintWriter(outputStream);
-            streamCSV(request, response, writer, dataList, rowKeys);
+            streamCSV(request, response, writer, dataList, rowKeys, delimiter);
             writer.flush();  // Flush any remaining buffered data
             outputStream.flush();  // Flush the output stream
             writer.close();
         }
     }
 
-    protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, String[] rowKeys) throws IOException {
+    protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, String[] rowKeys, String delimiter) throws IOException {
 
         DataListCollection rows = dataList.getRows();
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
 
-        String[] res = keySB.toString().split(",", 0);
+        String[] res = keySB.toString().split(delimiter, 0);
         duplicates.setMap(findDuplicate(res));
 
         if (includeCustomHeader()) {
@@ -191,7 +313,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     Object row = getRow(rows, x);
 
                     //get the keys and save it
-                    writeCSVContents(dataList, null, res, row, writer);
+                    writeCSVContents(dataList, null, res, row, writer, delimiter);
                 }
             }
 
@@ -202,7 +324,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             for (int x = 0; x < rows.size(); x++) {
                 Object row = getRow(rows, x);
                 //get the keys and save it
-                writeCSVContents(dataList, null, res, row, writer);
+                writeCSVContents(dataList, null, res, row, writer, delimiter);
             }
         }
         if (getFooter()) {
@@ -213,13 +335,13 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         }
     }
 
-    private void writeCSVContents(DataList dataList, ByteArrayOutputStream outputStream, String[] res, Object row, PrintWriter writer) throws IOException {
+    private void writeCSVContents(DataList dataList, ByteArrayOutputStream outputStream, String[] res, Object row, PrintWriter writer, String delimiter) throws IOException {
         StringBuilder stringBuilder = new StringBuilder();
         for (String myStr : res) {
             String value = getBinderFormattedValue(dataList, row, myStr);
             String formattedValue = getBinderFormattedValue(dataList, row, myStr);
             stringBuilder.append(formattedValue);
-            stringBuilder.append(",");
+            stringBuilder.append(delimiter);
         }
 
         if (stringBuilder.length() > 0) {
@@ -233,7 +355,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
     }
 
     protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, String[] rowKeys) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, rowKeys);
+        Workbook workbook = getExcel(dataList, dataList.getRows(), rowKeys);
         String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
         writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
@@ -256,9 +378,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
         return duplicates;
     }
 
-    protected Workbook getExcel(DataList dataList, String[] rowKeys) {
+    protected Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys) {
 
-        DataListCollection rows = dataList.getRows();
+        //DataListCollection rows = dataList.getRows();
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
@@ -306,7 +428,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
                     if (!foundRowKey) {
                         continue;
                     }
-
+                    
                     printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
                     counter += 1;
                     rowCounter += 1;
@@ -460,4 +582,5 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault {
             return ((FormRow) rows.get(x)).get("id").equals(rowKey);
         }
     }
+
 }
