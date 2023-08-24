@@ -134,8 +134,9 @@
                 "type": "textfield"
             },
             {
-                "name": "largfiles",
-                "label": "@@datalist.downloadCSVOrExcel.largfiles@@",
+                "name": "downloadBackgroud",
+                "label": "@@datalist.downloadCSVOrExcel.downloadBackgroud@@",
+                "description": "@@datalist.downloadCSVOrExcel.downloadBackgroud.desc@@",
                 "control_field": "downloadAs",
                 "control_value": "excel",
                 "type": "selectbox",
