@@ -149,6 +149,23 @@
                         "label": "@@datalist.downloadCSVOrExcel.yes@@"
                     }
                 ]
+            },
+            {
+                "label" : "@@datalist.downloadCSVOrExcel.target@@",
+                "name" : "target",
+                "type" : "selectbox",
+                "control_field": "downloadAs",
+                "control_value": "excel",
+                "options" : [
+                    {
+                    "value" : "blank",
+                    "label" : "@@datalist.downloadCSVOrExcel.newWindow@@"
+                    },
+                    {
+                    "value" : "self",
+                    "label" : "@@datalist.downloadCSVOrExcel.currentWindow@@"
+                    }
+                ]
             }
         ]
     }]

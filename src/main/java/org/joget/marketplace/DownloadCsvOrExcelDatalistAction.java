@@ -31,7 +31,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URLEncoder;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Collection;
 import java.util.HashSet;
@@ -98,6 +97,10 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getTarget() {
+        String target = getPropertyString("target");
+        if ("blank".equals(target)) {
+            return "_blank";
+        }
         return "post";
     }
 
@@ -171,12 +174,12 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         Thread excelDownloadThread = new PluginThread(new Runnable() {
                             public void run() {
                                 AppUtil.setCurrentAppDefinition(appDef);
-                                DataListCollection rows = dataList.getRows();
+                                dataList.setUseSession(false);
+                                DataListCollection rows = dataList.getRows(50000000, null);
                                 Workbook workbook = getExcel(dataList, rows, rowKeys);
                                 String filePath = excelFolder.getPath() + File.separator + excelFileName;
                                 try ( FileOutputStream fileOut = new FileOutputStream(filePath)) {
                                     workbook.write(fileOut);
-
                                 } catch (IOException e) {
                                     LogUtil.error(getClassName(), e, e.getMessage());
                                 }
@@ -189,6 +192,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         AppDefinition appDefination = AppUtil.getCurrentAppDefinition();
                         String url = "/jw/web/json/app/" + appDefination.getAppId() + "/" + appDefination.getVersion() + "/plugin/org.joget.marketplace.DownloadCsvOrExcelDatalistAction/service?uniqueId=" + uniqueId + "&filename=" + excelFileName;
                         result.setUrl(url);
+
                     } else {
                         downloadExcel(request, response, dataList, rowKeys);
                     }
@@ -332,10 +336,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             }
 
         } else if (getProperty("downloadAllWhenNoneSelected").equals("true")) {
-
-            //retrieve all rows
-            rows = dataList.getRows(0, 0);
-
+            //rows = dataList.getRows(50000000, null); //.getRows(); //.getRows(0, -1);
             //goes through all the datalist row
             for (int x = 0; x < rows.size(); x++) {
                 printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
@@ -374,7 +375,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
-
+        
         String uniqueId = request.getParameter("uniqueId");
         String filename = request.getParameter("filename");
         if (uniqueId != null && !uniqueId.isEmpty()) {
@@ -398,11 +399,13 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                     }
                     outputStream.close();
                 } else {
-                    String javascript = "<h4>Please wait while the file is being generated...</h4>"
+                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
+                    //String message = ResourceBundleUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage");
+                    String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h3>"+message+"</h3></marquee>"
                             + "<script>\n"
                             + "  setTimeout(function() {\n"
                             + "    location.reload();\n"
-                            + "  }, 5000); // Reload after 5 seconds\n"
+                            + "  }, 10000); // Reload after 5 seconds\n"
                             + "</script>";
 
                     response.setContentType("text/html");
@@ -420,7 +423,6 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     private boolean checkCompletionFlag(String path) {
-        //File flagFile = new File(path + "/completion.flag");
         File flagFile = new File(path);
         return flagFile.exists();
     }
