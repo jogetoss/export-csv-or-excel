@@ -4,7 +4,7 @@
     <groupId>org.joget.marketplace</groupId>
     <artifactId>export-csv-or-excel</artifactId>
     <packaging>bundle</packaging>
-    <version>8.0.3</version>
+    <version>8.0.4</version>
     <name>export-csv-or-excel</name>
     <url>http://www.joget.org</url>
     <build>

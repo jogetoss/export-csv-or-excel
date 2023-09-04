@@ -60,7 +60,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getVersion() {
-        return "8.0.3";
+        return "8.0.4";
     }
 
     @Override
@@ -336,8 +336,6 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             }
 
         } else if (getProperty("downloadAllWhenNoneSelected").equals("true")) {
-            //rows = dataList.getRows(50000000, null); //.getRows(); //.getRows(0, -1);
-            //goes through all the datalist row
             for (int x = 0; x < rows.size(); x++) {
                 printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
                 counter += 1;
@@ -375,15 +373,16 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
-        
+
         String uniqueId = request.getParameter("uniqueId");
         String filename = request.getParameter("filename");
+        String status = request.getParameter("status");
         if (uniqueId != null && !uniqueId.isEmpty()) {
             if (filename != null && !filename.isEmpty()) {
                 // check for the flag file
                 String path = getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
                 boolean fileGenerated = checkCompletionFlag(path);
-                if (fileGenerated) {
+                if (fileGenerated && "generated".equalsIgnoreCase(status)) {
                     File file = new File(path);
                     response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                     response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
@@ -398,10 +397,39 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         }
                     }
                     outputStream.close();
+
+                } else if (fileGenerated) {
+                    
+                    //datalist.downloadCSVOrExcel.downloadCompleteMessage
+                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessage", getClassName(), MESSAGE_PATH);
+                    String flagParam = "status=generated"; // Replace with your desired parameter and value
+                    String currentURL = request.getRequestURL().toString();
+
+                    if (request.getQueryString() != null) {
+                        currentURL += "?" + request.getQueryString() + "&" + flagParam;
+                    } else {
+                        currentURL += "?" + flagParam;
+                    }
+
+                    String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
+                            + "<script>\n"
+                            + "  setTimeout(function() {\n"
+                            + "    location.href = '" + currentURL + "';\n"
+                            + "  }, 3000); // Redirect after 10 seconds\n"
+                            + "</script>";
+
+                    response.setContentType("text/html");
+                    response.setCharacterEncoding("UTF-8");
+                    try {
+                        response.getWriter().write(javascript);
+                        response.flushBuffer();
+                    } catch (IOException ex) {
+                        LogUtil.error(getClassName(), ex, ex.getMessage());
+                    }
+
                 } else {
                     String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                    //String message = ResourceBundleUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage");
-                    String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h3>"+message+"</h3></marquee>"
+                    String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h3>" + message + "</h3></marquee>"
                             + "<script>\n"
                             + "  setTimeout(function() {\n"
                             + "    location.reload();\n"
@@ -416,8 +444,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                     } catch (IOException ex) {
                         LogUtil.error(getClassName(), ex, ex.getMessage());
                     }
-                }
 
+                }
             }
         }
     }

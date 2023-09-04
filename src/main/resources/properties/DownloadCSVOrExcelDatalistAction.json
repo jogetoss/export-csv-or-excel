@@ -131,7 +131,8 @@
                 "label": "@@datalist.downloadCSVOrExcel.filename@@",
                 "control_field": "renameFile",
                 "control_value": "true",
-                "type": "textfield"
+                "type": "textfield",
+                "description": "@@datalist.downloadCSVOrExcel.filename.desc@@"
             },
             {
                 "name": "downloadBackgroud",
