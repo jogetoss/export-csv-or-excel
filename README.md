@@ -1,6 +1,6 @@
 # Description
 
-Download CSV or Excel Action allows one to export of list records to Excel or CSV with option to customize header and footer.
+**Download CSV or Excel Action** allows one to export of list records to Excel or CSV with the option to customize the header and footer.
 
 # Getting Help
 
