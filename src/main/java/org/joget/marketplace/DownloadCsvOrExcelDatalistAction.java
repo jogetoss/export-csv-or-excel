@@ -40,6 +40,7 @@ import java.util.UUID;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.joget.apps.app.model.AppDefinition;
+import org.joget.apps.datalist.model.DataListFilterQueryObject;
 import static org.joget.commons.util.FileManager.getBaseDirectory;
 import org.joget.commons.util.PluginThread;
 import org.joget.plugin.base.PluginWebSupport;
@@ -60,7 +61,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getVersion() {
-        return "8.0.5";
+        return "8.0.6";
     }
 
     @Override
@@ -97,8 +98,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getTarget() {
-        String target = getPropertyString("target");
-        if ("blank".equals(target)) {
+        String downloadBackgroud = getPropertyString("downloadBackgroud");
+        if ("true".equals(downloadBackgroud)) {
             return "_blank";
         }
         return "post";
@@ -159,7 +160,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                 //get the HTTP Response
                 HttpServletResponse response = WorkflowUtil.getHttpServletResponse();
                 if (getDownloadAs()) {
-                    downloadCSV(request, response, dataList, rowKeys);
+                    DataListCollection dataListRows = getDataListRows(dataList, rowKeys, false);
+                    downloadCSV(request, response, dataList, dataListRows, rowKeys);
                 } else {
                     String downloadBackgroud = getPropertyString("downloadBackgroud");
                     if ("true".equalsIgnoreCase(downloadBackgroud)) {
@@ -175,8 +177,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                             public void run() {
                                 AppUtil.setCurrentAppDefinition(appDef);
                                 dataList.setUseSession(false);
-                                DataListCollection rows = dataList.getRows(50000000, null);
-                                Workbook workbook = getExcel(dataList, rows, rowKeys);
+                                DataListCollection rows = getDataListRows(dataList, rowKeys, true);
+                                //DataListCollection rows = dataList.getRows(50000000, null);
+                                Workbook workbook = getExcel(dataList, rows, rowKeys, true);
                                 String filePath = excelFolder.getPath() + File.separator + excelFileName;
                                 try ( FileOutputStream fileOut = new FileOutputStream(filePath)) {
                                     workbook.write(fileOut);
@@ -194,7 +197,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         result.setUrl(url);
 
                     } else {
-                        downloadExcel(request, response, dataList, rowKeys);
+                        // not in the backgroud, get the rows
+                        DataListCollection rows = getDataListRows(dataList, rowKeys, false);
+                        downloadExcel(request, response, dataList, rows, rowKeys);
                     }
                 }
             } catch (ServletException e) {
@@ -206,7 +211,22 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         return result;
     }
 
-    protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, String[] rowKeys) throws ServletException, IOException {
+    private DataListCollection getDataListRows(DataList dataList, String[] rowKeys, boolean background) {
+        DataListCollection dataListRows = null;
+        if (rowKeys != null && rowKeys.length > 0) {
+            addDataListFilter(dataList, rowKeys);
+            dataListRows = dataList.getRows();
+        } else {
+            if(background) {
+                dataListRows = dataList.getRows(50000000, null);
+            } else {
+                dataListRows = dataList.getRows(0, 0);
+            }
+        }
+        return dataListRows;
+    }
+
+    protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
 
         String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
         String delimiter = getPropertyString("delimiter");
@@ -218,17 +238,15 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
         try ( OutputStream outputStream = response.getOutputStream()) {
             PrintWriter writer = new PrintWriter(outputStream);
-            streamCSV(request, response, writer, dataList, rowKeys, delimiter);
-            //streamCSV(request, response, writer, dataList, rowKeys, delimiter);
+            streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
             writer.flush();  // Flush any remaining buffered data
             outputStream.flush();  // Flush the output stream
             writer.close();
         }
     }
 
-    protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, String[] rowKeys, String delimiter) throws IOException {
+    protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String delimiter) throws IOException {
 
-        DataListCollection rows = dataList.getRows();
         HashMap<String, StringBuilder> labelAndKeys = getLabelAndKey(dataList);
         StringBuilder keySB = labelAndKeys.get("key");
         StringBuilder headerSB = labelAndKeys.get("header");
@@ -245,25 +263,25 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             headerSB.setLength(0);
             headerSB.append(replacedString);
         }
-        
+
         writer.write((headerSB + "\n"));
 
         if (rowKeys != null && rowKeys.length > 0) {
             //goes through all the datalist row
-            for (int x = 0; x < rows.size(); x++) {
+            for (int x = 0; x < dataListRows.size(); x++) {
                 //compare with all the rowkeys that have been selected
                 for (String rowKey : rowKeys) {
-                    
+
                     //check instance of HashMap if not it will be Formrow
-                    boolean boolInstance = rows.get(x) instanceof HashMap;
-                    boolean foundRowKey = foundRowKey(boolInstance, rows, x, rowKey);
+                    boolean boolInstance = dataListRows.get(x) instanceof HashMap;
+                    boolean foundRowKey = foundRowKey(boolInstance, dataListRows, x, rowKey);
 
                     //if no row is found skip
                     if (!foundRowKey) {
                         continue;
                     }
 
-                    Object row = getRow(rows, x);
+                    Object row = getRow(dataListRows, x);
 
                     //get the keys and save it
                     writeCSVContents(dataList, null, keys, row, writer, delimiter);
@@ -271,11 +289,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             }
 
         } else if (getProperty("downloadAllWhenNoneSelected").equals("true")) {
-            //retrieve all rows
-            rows = dataList.getRows(0, 0);
-            //goes through all the datalist row
-            for (int x = 0; x < rows.size(); x++) {
-                Object row = getRow(rows, x);
+            for (int x = 0; x < dataListRows.size(); x++) {
+                Object row = getRow(dataListRows, x);
                 //get the keys and save it
                 writeCSVContents(dataList, null, keys, row, writer, delimiter);
             }
@@ -311,8 +326,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         writer.flush();
     }
 
-    protected Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys) {
-        //DataListCollection rows = dataList.getRows();
+    protected Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background) {
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
@@ -339,9 +353,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
         Row headerColumnRow = sheet.createRow(rowCounter);
         counter = 0;
-        for (String myStr : header) {
+        for (String value : header) {
             Cell headerCell = headerColumnRow.createCell(counter);
-            headerCell.setCellValue(myStr);
+            headerCell.setCellValue(value);
             counter += 1;
         }
 
@@ -349,8 +363,6 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         counter = 0;
 
         if (rowKeys != null && rowKeys.length > 0) {
-
-            //goes through all the datalist row
             for (int x = 0; x < rows.size(); x++) {
                 //compare with all the rowkeys that have been selected
                 for (int y = 0; y < rowKeys.length; y++) {
@@ -393,6 +405,25 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         }
 
         return workbook;
+
+    }
+
+    public void addDataListFilter(DataList dataList, String[] rowKeys) {
+        if (!dataList.isUseSession()) {
+            DataListFilterQueryObject filterKeys = new DataListFilterQueryObject();
+            filterKeys.setOperator("AND");
+            String column = dataList.getBinder().getColumnName(dataList.getBinder().getPrimaryKeyColumnName());
+            String query = "";
+            for (int i = 0; i < rowKeys.length; i++) {
+                if (!query.isEmpty()) {
+                    query += ",";
+                }
+                query += "?";
+            }
+            filterKeys.setQuery(column + " IN (" + query + ")");
+            filterKeys.setValues(rowKeys);
+            dataList.addFilterQueryObject(filterKeys);
+        }
 
     }
 
@@ -486,8 +517,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         return flagFile.exists();
     }
 
-    protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, String[] rowKeys) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, dataList.getRows(), rowKeys);
+    protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
+        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
         String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
         writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
@@ -582,8 +613,12 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         for (DataListColumn column : dataList.getColumns()) {
             String header = column.getLabel();
             String key = column.getName();
-            String excludeExport = column.getPropertyString("exclude_export");//.isHidden();
-            if (!"true".equalsIgnoreCase(excludeExport) && !column.isHidden()) {
+
+            String excludeExport = column.getPropertyString("exclude_export");
+            String includeExport = column.getPropertyString("include_export");
+            boolean hidden = column.isHidden();
+            
+            if ((hidden && "true".equalsIgnoreCase(includeExport)) || (!hidden && !"true".equalsIgnoreCase(excludeExport))) {
                 headerSB.append(header).append(",");
                 keySB.append(key).append(",");
             }

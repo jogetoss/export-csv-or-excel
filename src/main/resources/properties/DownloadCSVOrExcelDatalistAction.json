@@ -45,7 +45,8 @@
             {
                 "name": "confirmation",
                 "label": "@@datalist.downloadCSVOrExcel.confirmationMessage@@",
-                "type": "textfield"
+                "type": "textfield",
+                "description": "@@datalist.downloadCSVOrExcel.confirmationMessageDesc@@"
             },
             {
                 "label": "@@datalist.downloadCSVOrExcel.advancedSetting@@",
@@ -135,6 +136,12 @@
                 "description": "@@datalist.downloadCSVOrExcel.filename.desc@@"
             },
             {
+                "label": "@@datalist.downloadCSVOrExcel.downloadSetting@@",
+                "type": "header",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
                 "name": "downloadBackgroud",
                 "label": "@@datalist.downloadCSVOrExcel.downloadBackgroud@@",
                 "description": "@@datalist.downloadCSVOrExcel.downloadBackgroud.desc@@",
@@ -148,23 +155,6 @@
                     {
                         "value": "true",
                         "label": "@@datalist.downloadCSVOrExcel.yes@@"
-                    }
-                ]
-            },
-            {
-                "label" : "@@datalist.downloadCSVOrExcel.target@@",
-                "name" : "target",
-                "type" : "selectbox",
-                "control_field": "downloadAs",
-                "control_value": "excel",
-                "options" : [
-                    {
-                    "value" : "blank",
-                    "label" : "@@datalist.downloadCSVOrExcel.newWindow@@"
-                    },
-                    {
-                    "value" : "self",
-                    "label" : "@@datalist.downloadCSVOrExcel.currentWindow@@"
                     }
                 ]
             }
