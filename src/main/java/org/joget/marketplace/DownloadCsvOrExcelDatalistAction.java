@@ -61,7 +61,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getVersion() {
-        return "8.0.6";
+        return "8.0.7";
     }
 
     @Override
@@ -217,7 +217,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             addDataListFilter(dataList, rowKeys);
             dataListRows = dataList.getRows();
         } else {
-            if(background) {
+            if (background) {
                 dataListRows = dataList.getRows(50000000, null);
             } else {
                 dataListRows = dataList.getRows(0, 0);
@@ -300,6 +300,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             writer.write((headerSB + "\n"));
         }
         if (includeCustomFooter()) {
+            writer.write("\n");
             writer.write((getPropertyString("footerDecorator") + "\n"));
         }
     }
@@ -346,8 +347,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             titleCell.setCellValue(headerString);
             int getNewLine = headerString.split("\r\n|\r|\n").length;
             headerRow.setHeightInPoints((getNewLine * sheet.getDefaultRowHeightInPoints()));
-            sheet.autoSizeColumn(2);
-            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, header.length - 1));
+
+            if (header.length >= 2) {
+                sheet.autoSizeColumn(2);
+                sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, header.length - 1));
+            }
             rowCounter += 1;
         }
 
@@ -401,7 +405,10 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             Row footerColumnRow = sheet.createRow(rowCounter);
             Cell titleCell = footerColumnRow.createCell(0);
             titleCell.setCellValue(getPropertyString("footerDecorator"));
-            sheet.addMergedRegion(new CellRangeAddress(rowCounter, rowCounter, 0, header.length - 1));
+            
+            if (header.length >= 2) {
+                sheet.addMergedRegion(new CellRangeAddress(rowCounter, rowCounter, 0, header.length - 1));
+            }
         }
 
         return workbook;
@@ -617,7 +624,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             String excludeExport = column.getPropertyString("exclude_export");
             String includeExport = column.getPropertyString("include_export");
             boolean hidden = column.isHidden();
-            
+
             if ((hidden && "true".equalsIgnoreCase(includeExport)) || (!hidden && !"true".equalsIgnoreCase(excludeExport))) {
                 headerSB.append(header).append(",");
                 keySB.append(key).append(",");
