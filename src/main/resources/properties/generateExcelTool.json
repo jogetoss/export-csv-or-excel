@@ -1,0 +1,39 @@
+[
+    {
+        "title": "@@generateExcelTool.config@@",
+        "properties": [
+            {
+                "name": "listId",
+                "label": "@@generateExcelTool.list@@",
+                "type": "selectbox",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/datalist/options",
+                "required": "True"
+            },
+            {
+                "name": "formDefId",
+                "label": "@@generateExcelTool.form@@",
+                "type": "selectbox",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
+                "required": "True"
+            },
+            {
+                "name": "formField",
+                "label": "@@generateExcelTool.form.formField@@",
+                "type" : "TextField",
+                "required" : "True"
+            },
+            {
+                "name": "formRecordId",
+                "label": "@@generateExcelTool.recordId@@",
+                "type" : "TextField",
+                "required" : "True"
+            },
+            {
+                "name": "fileName",
+                "label": "@@generateExcelTool.fileName@@",
+                "type" : "TextField",
+                "required" : "True"
+            }
+        ]
+    }
+]
