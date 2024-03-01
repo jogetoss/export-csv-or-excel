@@ -1,7 +1,6 @@
 package org.joget.marketplace;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -31,12 +30,22 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URLEncoder;
-import java.util.HashMap;
+import java.text.DecimalFormat;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import org.apache.commons.lang.ObjectUtils;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.xssf.usermodel.XSSFRichTextString;
+
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.joget.apps.app.model.AppDefinition;
@@ -646,12 +655,25 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             String value = getBinderFormattedValue(dataList, row, myStr);
             Cell dataRowCell = dataRow.createCell(z);
             if (NumberUtils.isParsable(value)) {
-                dataRowCell.setCellValue(Double.parseDouble(value));
+                double numericValue = Double.parseDouble(value);
+                if (isWholeNumber(numericValue)) {
+                    // If the numeric value is a whole number, format it to display without decimal points
+                    DecimalFormat decimalFormat = new DecimalFormat("#");
+                    value = decimalFormat.format(numericValue);
+                } else {
+                    // If the numeric value has decimal points, set it directly
+                    value = Double.toString(numericValue);
+                }
+                dataRowCell.setCellValue(value);
             } else {
                 dataRowCell.setCellValue(value);
             }
-            z += 1;
+                z += 1;
         }
+    }
+    private boolean isWholeNumber(double value) {
+    // Check if the value is a whole number (i.e., has no decimal points)
+    return value == Math.floor(value) && !Double.isInfinite(value);
     }
 
     private Object getRow(DataListCollection rows, int x) {
