@@ -110,6 +110,58 @@
                 "required": "True"
             },
             {
+                "name": "downloadAsZip",
+                "label": "@@datalist.downloadCSVOrExcel.downloadAsZip@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
+                "name":"encryptZip",
+                "label":"@@datalist.downloadCSVorExcel.encryptZip@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "control_field": "downloadAsZip",
+                "control_value": "true"
+            },
+            {
+                "name": "encryptionMethod",
+                "label": "@@datalist.downloadCSVOrExcel.encryptionMethod@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "256",
+                        "label": "@@datalist.downloadCSVOrExcel.256@@"
+                    },
+                    {
+                        "value": "128",
+                        "label": "@@datalist.downloadCSVOrExcel.128@@"
+                    }],
+                "control_field": "encryptZip",
+                "control_value": "true"
+            },
+            {
+                "name": "zipPassword",
+                "label": "@@datalist.downloadCSVOrExcel.zipPassword@@",
+                "control_field": "encryptZip",
+                "control_value": "true",
+                "type": "password",
+                "required": "True"
+            },
+            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },
