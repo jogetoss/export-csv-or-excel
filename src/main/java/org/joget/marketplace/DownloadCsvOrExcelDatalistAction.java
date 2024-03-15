@@ -1,7 +1,6 @@
 package org.joget.marketplace;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -23,21 +22,33 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import org.apache.poi.ss.usermodel.Cell;
+//import net.lingala.zip4j.io.outputstream.ZipOutputStream;
+//import java.util.zip.ZipOutputStream;
+import net.lingala.zip4j.model.ZipParameters;
+import net.lingala.zip4j.model.enums.AesKeyStrength;
+import net.lingala.zip4j.model.enums.CompressionMethod;
+import net.lingala.zip4j.model.enums.EncryptionMethod;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.URLEncoder;
-import java.util.HashMap;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-
 import org.apache.commons.lang3.math.NumberUtils;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.datalist.model.DataListFilterQueryObject;
@@ -227,23 +238,108 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
+        
+        if(getPropertyString("downloadAsZip").equals("false")){
+            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
+            String delimiter = getPropertyString("delimiter");
+            if (delimiter.isEmpty()) {
+                delimiter = ",";
+            }
+            response.setContentType("text/csv");
+            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
 
-        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
-        String delimiter = getPropertyString("delimiter");
-        if (delimiter.isEmpty()) {
-            delimiter = ",";
+            try ( OutputStream outputStream = response.getOutputStream()) {
+                PrintWriter writer = new PrintWriter(outputStream);
+                streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
+                writer.flush();  // Flush any remaining buffered data
+                outputStream.flush();  // Flush the output stream
+                writer.close();
+            }
+        }else if(getPropertyString("downloadAsZip").equals("true")){
+            // Set the response headers for a zip file
+            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") : "report";
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
+
+            try (ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream()) {
+                ArrayList<ByteArrayOutputStream> csvStreams = new ArrayList<>();
+
+                // Generate CSV files and store them in the list
+                for (int i = 0; i < 1; i++) {
+                    ByteArrayOutputStream csvStream = new ByteArrayOutputStream();
+                    streamCSV(request, response, new PrintWriter(new OutputStreamWriter(csvStream)), dataList, dataListRows, rowKeys, ",");
+                    csvStreams.add(csvStream);
+                }
+                
+                //Check if user want to encrypt generated zip file
+                if(getPropertyString("encryptZip").equals("false")){
+                    // Create a zip file
+                    writeCSVsToZip(csvStreams, zipOutputStream ,filename);            
+                }else{
+                    // Create a password-protected zip file
+                    writeCSVsToPasswordZip(csvStreams, zipOutputStream , getPropertyString("zipPassword") , filename , getPropertyString("encryptionMethod"));
+                }
+                
+                response.getOutputStream().write(zipOutputStream.toByteArray());  
+
+            }
         }
-        response.setContentType("text/csv");
-        response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
 
-        try ( OutputStream outputStream = response.getOutputStream()) {
-            PrintWriter writer = new PrintWriter(outputStream);
-            streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
-            writer.flush();  // Flush any remaining buffered data
-            outputStream.flush();  // Flush the output stream
-            writer.close();
+    }
+    
+    //Write CSV to Zip
+    protected void writeCSVsToZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream , String filename) throws IOException {
+        try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(zipOutputStream)) {
+            for (int i = 0; i < csvStreams.size(); i++) {
+                ByteArrayOutputStream csvStream = csvStreams.get(i);
+                ZipEntry zipEntry = new ZipEntry(filename + "-" + i + ".csv");
+                zipOut.putNextEntry(zipEntry);
+                zipOut.write(csvStream.toByteArray());
+                zipOut.closeEntry();
+                csvStream.close();
+            }
         }
     }
+    
+    //Write CSV to password protected zip
+    protected void writeCSVsToPasswordZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream, String password , String filename , String encryptionMethod) throws IOException {
+        try (net.lingala.zip4j.io.outputstream.ZipOutputStream zipOut = initializeZipOutputStream(zipOutputStream, true, password.toCharArray())) {
+            for (int i = 0; i < csvStreams.size(); i++) {
+                ByteArrayOutputStream csvStream = csvStreams.get(i);
+                if(encryptionMethod.equals("256")){
+                    ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true, EncryptionMethod.AES, AesKeyStrength.KEY_STRENGTH_256);
+                    zipParameters.setFileNameInZip(filename + "-" + i + ".csv");
+                    zipOut.putNextEntry(zipParameters);
+                }else if(encryptionMethod.equals("128")){
+                    ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true, EncryptionMethod.AES, AesKeyStrength.KEY_STRENGTH_128);
+                    zipParameters.setFileNameInZip(filename + "-" + i + ".csv");
+                    zipOut.putNextEntry(zipParameters);
+                }
+                zipOut.write(csvStream.toByteArray());
+                zipOut.closeEntry();
+                csvStream.close();
+            }
+        }
+    }
+    
+    //Initalise the Zip Output Stream
+    private net.lingala.zip4j.io.outputstream.ZipOutputStream initializeZipOutputStream(ByteArrayOutputStream outputZipFile, boolean encrypt, char[] password)
+            throws IOException {
+        net.lingala.zip4j.io.outputstream.ZipOutputStream zipOutputStream = new net.lingala.zip4j.io.outputstream.ZipOutputStream(outputZipFile, password);
+        return zipOutputStream;
+    }
+    
+    //To build zip parameters
+    private ZipParameters buildZipParameters(CompressionMethod compressionMethod, boolean encrypt,
+        EncryptionMethod encryptionMethod, AesKeyStrength aesKeyStrength) {
+        ZipParameters zipParameters = new ZipParameters();
+        zipParameters.setCompressionMethod(compressionMethod);
+        zipParameters.setEncryptionMethod(encryptionMethod);
+        zipParameters.setAesKeyStrength(aesKeyStrength);
+        zipParameters.setEncryptFiles(encrypt);
+        return zipParameters;
+    }
+
 
     protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String delimiter) throws IOException {
 
@@ -264,7 +360,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             headerSB.append(replacedString);
         }
 
-        writer.write((headerSB + "\n"));
+        writer.write((headerSB + ""));
 
         if (rowKeys != null && rowKeys.length > 0) {
             //goes through all the datalist row
@@ -306,6 +402,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     private void writeCSVContents(DataList dataList, ByteArrayOutputStream outputStream, String[] keys, Object row, PrintWriter writer, String delimiter) throws IOException {
+        // Construct CSV content
         StringBuilder stringBuilder = new StringBuilder();
         for (String value : keys) {
             String formattedValue = getBinderFormattedValue(dataList, row, value);
@@ -318,13 +415,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             stringBuilder.append(delimiter);
         }
 
-        if (stringBuilder.length() > 0) {
-            stringBuilder.setLength(stringBuilder.length() - 1);
-        }
-        String value = stringBuilder.toString();
+        // Write original CSV content to the output stream
         writer.write("\r\n");
-        writer.write(value);
+        writer.write(stringBuilder.toString());
         writer.flush();
+
     }
 
     protected Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background) {
@@ -646,12 +741,26 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             String value = getBinderFormattedValue(dataList, row, myStr);
             Cell dataRowCell = dataRow.createCell(z);
             if (NumberUtils.isParsable(value)) {
-                dataRowCell.setCellValue(Double.parseDouble(value));
+                double numericValue = Double.parseDouble(value);
+                if (isWholeNumber(numericValue)) {
+                    // If the numeric value is a whole number, format it to display without decimal points
+                    DecimalFormat decimalFormat = new DecimalFormat("#");
+                    value = decimalFormat.format(numericValue);
+                } else {
+                    // If the numeric value has decimal points, set it directly
+                    value = Double.toString(numericValue);
+                }
+                dataRowCell.setCellValue(value);
             } else {
                 dataRowCell.setCellValue(value);
             }
-            z += 1;
+                z += 1;
         }
+    }
+    
+    private boolean isWholeNumber(double value) {
+    // Check if the value is a whole number (i.e., has no decimal points)
+    return value == Math.floor(value) && !Double.isInfinite(value);
     }
 
     private Object getRow(DataListCollection rows, int x) {

@@ -15,6 +15,7 @@ public class Activator implements BundleActivator {
 
         //Register plugin here
         registrationList.add(context.registerService(DownloadCsvOrExcelDatalistAction.class.getName(), new DownloadCsvOrExcelDatalistAction(), null));
+        registrationList.add(context.registerService(GenerateExcelTool.class.getName(), new GenerateExcelTool(), null));
     }
 
     public void stop(BundleContext context) {
