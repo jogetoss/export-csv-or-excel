@@ -257,10 +257,10 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                 //Check if user want to encrypt generated zip file
                 if(getPropertyString("encryptZip").equals("false")){
                     // Create a zip file
-                    writeCSVsToZip(csvStreams, zipOutputStream ,filename);            
+                    writeFilesToZip(csvStreams, zipOutputStream ,filename, ".csv");            
                 }else{
                     // Create a password-protected zip file
-                    writeCSVsToPasswordZip(csvStreams, zipOutputStream , getPropertyString("zipPassword") , filename , getPropertyString("encryptionMethod"));
+                    writeFilesToPasswordZip(csvStreams, zipOutputStream , getPropertyString("zipPassword") , filename , getPropertyString("encryptionMethod"), ".csv");
                 }
                 
                 response.getOutputStream().write(zipOutputStream.toByteArray());  
@@ -286,12 +286,12 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     }
     
-    //Write CSV to Zip
-    protected void writeCSVsToZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream , String filename) throws IOException {
+    //Write CSV/Excel to Zip
+    protected void writeFilesToZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream , String filename, String csvOrExcel) throws IOException {
         try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(zipOutputStream)) {
             for (int i = 0; i < csvStreams.size(); i++) {
                 ByteArrayOutputStream csvStream = csvStreams.get(i);
-                ZipEntry zipEntry = new ZipEntry(filename + "-" + i + ".csv");
+                ZipEntry zipEntry = new ZipEntry(filename + "-" + i + csvOrExcel);
                 zipOut.putNextEntry(zipEntry);
                 zipOut.write(csvStream.toByteArray());
                 zipOut.closeEntry();
@@ -300,18 +300,18 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         }
     }
     
-    //Write CSV to password protected zip
-    protected void writeCSVsToPasswordZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream, String password , String filename , String encryptionMethod) throws IOException {
+    //Write CSV/Excel to password protected zip
+    protected void writeFilesToPasswordZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream, String password , String filename , String encryptionMethod, String csvOrExcel) throws IOException {
         try (net.lingala.zip4j.io.outputstream.ZipOutputStream zipOut = initializeZipOutputStream(zipOutputStream, true, password.toCharArray())) {
             for (int i = 0; i < csvStreams.size(); i++) {
                 ByteArrayOutputStream csvStream = csvStreams.get(i);
                 if(encryptionMethod.equals("256")){
                     ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true, EncryptionMethod.AES, AesKeyStrength.KEY_STRENGTH_256);
-                    zipParameters.setFileNameInZip(filename + "-" + i + ".csv");
+                    zipParameters.setFileNameInZip(filename + "-" + i + csvOrExcel);
                     zipOut.putNextEntry(zipParameters);
                 }else if(encryptionMethod.equals("128")){
                     ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true, EncryptionMethod.AES, AesKeyStrength.KEY_STRENGTH_128);
-                    zipParameters.setFileNameInZip(filename + "-" + i + ".csv");
+                    zipParameters.setFileNameInZip(filename + "-" + i + csvOrExcel);
                     zipOut.putNextEntry(zipParameters);
                 }
                 zipOut.write(csvStream.toByteArray());
@@ -619,9 +619,41 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
-        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
-        writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
+        if(getPropertyString("downloadAsZip").equals("true")){
+            // Set the response headers for a zip file
+            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") : "report";
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
+
+            try (ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream()) {
+                ArrayList<ByteArrayOutputStream> csvStreams = new ArrayList<>();
+
+                // Generate CSV files and store them in the list
+                for (int i = 0; i < 1; i++) {
+                    ByteArrayOutputStream csvStream = new ByteArrayOutputStream();
+                    Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
+                    workbook.write(csvStream);
+                    workbook.close();
+                    csvStreams.add(csvStream);
+                }
+                
+                //Check if user want to encrypt generated zip file
+                if(getPropertyString("encryptZip").equals("false")){
+                    // Create a zip file
+                    writeFilesToZip(csvStreams, zipOutputStream ,filename, ".xlsx");            
+                }else{
+                    // Create a password-protected zip file
+                    writeFilesToPasswordZip(csvStreams, zipOutputStream , getPropertyString("zipPassword") , filename , getPropertyString("encryptionMethod"), ".xlsx");
+                }
+                
+                response.getOutputStream().write(zipOutputStream.toByteArray());  
+
+            }
+        } else {
+            Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
+            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
+            writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
+        }
     }
 
     private HashMap<String, Integer> findDuplicate(String[] keySB) {
