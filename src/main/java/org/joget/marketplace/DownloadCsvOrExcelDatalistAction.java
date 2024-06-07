@@ -238,24 +238,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
-        
-        if(getPropertyString("downloadAsZip").equals("false")){
-            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
-            String delimiter = getPropertyString("delimiter");
-            if (delimiter.isEmpty()) {
-                delimiter = ",";
-            }
-            response.setContentType("text/csv");
-            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
-
-            try ( OutputStream outputStream = response.getOutputStream()) {
-                PrintWriter writer = new PrintWriter(outputStream);
-                streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
-                writer.flush();  // Flush any remaining buffered data
-                outputStream.flush();  // Flush the output stream
-                writer.close();
-            }
-        }else if(getPropertyString("downloadAsZip").equals("true")){
+        if(getPropertyString("downloadAsZip").equals("true")){
             // Set the response headers for a zip file
             String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") : "report";
             response.setContentType("application/zip");
@@ -282,6 +265,22 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                 
                 response.getOutputStream().write(zipOutputStream.toByteArray());  
 
+            }
+        } else {
+            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
+            String delimiter = getPropertyString("delimiter");
+            if (delimiter.isEmpty()) {
+                delimiter = ",";
+            }
+            response.setContentType("text/csv");
+            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
+
+            try ( OutputStream outputStream = response.getOutputStream()) {
+                PrintWriter writer = new PrintWriter(outputStream);
+                streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
+                writer.flush();  // Flush any remaining buffered data
+                outputStream.flush();  // Flush the output stream
+                writer.close();
             }
         }
 
