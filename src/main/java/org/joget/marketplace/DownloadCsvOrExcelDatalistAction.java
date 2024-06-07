@@ -72,7 +72,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getVersion() {
-        return "8.0.7";
+        return "8.0.8";
     }
 
     @Override
