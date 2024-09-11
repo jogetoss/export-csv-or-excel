@@ -1,6 +1,6 @@
 # Description
 
-**Download CSV or Excel Action** allow users to effortlessly download data in Excel or CSV formats while providing the flexibility to customize headers and footers. This plugin proves exceptionally valuable for efficiently handling large datasets and supports background downloads.
+**Download CSV or Excel Action** allow users to download data in Excel or CSV formats while providing the flexibility to customize headers and footers. This plugin proves exceptionally valuable for efficiently handling large datasets and supports background downloads.
 
 To setup and configure this plugin, please see the [documentation](https://dev.joget.org/community/display/marketplace/Download+CSV+or+Excel+Action).
 
