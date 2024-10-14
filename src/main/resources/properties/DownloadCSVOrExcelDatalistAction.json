@@ -209,6 +209,45 @@
                         "label": "@@datalist.downloadCSVOrExcel.yes@@"
                     }
                 ]
+            },
+
+            {
+                "name": "storeToForm",
+                "label": "@@datalist.downloadCSVOrExcel.storeToForm@@",
+                "type": "checkbox",
+                 "options": [
+                    {
+                        "value": "true",
+                        "label": ""
+                    }
+                ],
+                "required": "False"
+            },
+            {
+                "label": "@@datalist.downloadCSVOrExcel.formToStoreFile@@",
+                "type": "header",
+                "control_field": "storeToForm",
+                "control_value": "true"
+            },
+            {
+                "name": "formDefId",
+                "label": "@@datalist.downloadCSVOrExcel.formDefId@@",
+                "type": "selectbox",
+                "required": "True",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
+                "control_field": "storeToForm",
+                "control_value": "true"
+            },
+            {
+                "name": "fileFieldId",
+                "label": "@@datalist.downloadCSVOrExcel.fileFieldId@@",
+                "type": "selectbox",
+                "options_ajax_on_change": "formDefId",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/form/columns/options",
+                "required": "True",
+                "control_field": "storeToForm",
+                "control_value": "true"
             }
         ]
-    }]
+    }
+]
