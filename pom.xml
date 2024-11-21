@@ -4,7 +4,7 @@
     <groupId>org.joget.marketplace</groupId>
     <artifactId>export-csv-or-excel</artifactId>
     <packaging>bundle</packaging>
-    <version>8.0.9</version>
+    <version>8.0.10</version>
     <name>export-csv-or-excel</name>
     <url>http://www.joget.org</url>
     <build>
@@ -102,12 +102,7 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.3</version>
-        </dependency>
-        <dependency>
-            <groupId>net.lingala.zip4j</groupId>
-            <artifactId>zip4j</artifactId>
-            <version>2.11.3</version>
-        </dependency>        
+        </dependency>  
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>

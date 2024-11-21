@@ -16,6 +16,7 @@ import org.joget.apps.datalist.model.DataListActionResult;
 import org.joget.apps.datalist.model.DataListCollection;
 import org.joget.apps.datalist.service.DataListService;
 import org.joget.apps.form.model.FormRow;
+import org.joget.commons.util.FileManager;
 import org.joget.commons.util.LogUtil;
 import org.joget.workflow.util.WorkflowUtil;
 import javax.servlet.ServletException;
@@ -31,11 +32,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.zip.ZipEntry;
 import org.apache.poi.ss.usermodel.Cell;
 import java.io.File;
 import java.io.FileInputStream;
@@ -49,15 +48,10 @@ import org.joget.apps.datalist.model.DataListFilterQueryObject;
 import org.joget.apps.form.model.FormRowSet;
 import org.joget.apps.form.service.FileUtil;
 import org.joget.apps.form.service.FormUtil;
-import static org.joget.commons.util.FileManager.getBaseDirectory;
 import org.joget.commons.util.PluginThread;
 import org.joget.commons.util.UuidGenerator;
 import org.joget.plugin.base.PluginWebSupport;
 import org.joget.workflow.model.service.WorkflowUserManager;
-import net.lingala.zip4j.model.ZipParameters;
-import net.lingala.zip4j.model.enums.AesKeyStrength;
-import net.lingala.zip4j.model.enums.CompressionMethod;
-import net.lingala.zip4j.model.enums.EncryptionMethod;
 
 public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault implements PluginWebSupport {
 
@@ -74,7 +68,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getVersion() {
-        return "8.0.9";
+        return "8.0.10";
     }
 
     @Override
@@ -189,15 +183,14 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                 } else {
                     String downloadBackgroud = getPropertyString("downloadBackgroud");
                     if ("true".equalsIgnoreCase(downloadBackgroud)) {
-                        final String uniqueId = UUID.randomUUID().toString();
-                        final String excelFileName = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
-                        final File excelFolder = new File(getBaseDirectory(), uniqueId);
+                        String uniqueId = UuidGenerator.getInstance().getUuid();
+                        String excelFileName = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
+                        File excelFolder = new File(FileManager.getBaseDirectory(), uniqueId);
                         if (!excelFolder.isDirectory()) {
                             //create directories if not exist
-                            new File(getBaseDirectory(), uniqueId).mkdirs();
+                            new File(FileManager.getBaseDirectory(), uniqueId).mkdirs();
                         }
-                        final AppDefinition appDef = AppUtil.getCurrentAppDefinition();
-                        final boolean downloadAsZip = "true".equals(getPropertyString("downloadAsZip"));
+                        AppDefinition appDef = AppUtil.getCurrentAppDefinition();
 
                         Thread excelDownloadThread = new PluginThread(new Runnable() {
                             public void run() {
@@ -209,46 +202,18 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                                 String filePath = excelFolder.getPath() + File.separator + excelFileName;
 
                                 try {
-                                    // Write the Excel file
                                     try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
                                         workbook.write(fileOut);
                                     } catch (IOException e) {
                                         LogUtil.error(getClassName(), e, e.getMessage());
                                     }
 
-                                    // Store Excel to form if enabled
                                     if (storeToForm) {
                                         new File(filePath + ".completed").createNewFile();
                                         storeExcelToForm(workbook, excelFileName);
                                     }
 
-                                    // Continue with ZIP download if storeToForm is false
-                                    if (!storeToForm && downloadAsZip) {
-                                        String zipFilePath = filePath.replace(".xlsx", ".zip");
-                                        try (FileOutputStream zipFileOut = new FileOutputStream(zipFilePath); FileInputStream excelFileIn = new FileInputStream(filePath)) {
-                                            ArrayList<InputStream> streams = new ArrayList<>();
-                                            streams.add(excelFileIn);
-                                            boolean encryptZip = "true".equalsIgnoreCase(getPropertyString("encryptZip"));
-
-                                            if (encryptZip) {
-                                                String password = getPropertyString("zipPassword");
-                                                String encryptionMethod = getPropertyString("encryptionMethod");
-
-                                                writeInputStreamsToPasswordZip(streams, zipFileOut, password, excelFileName, encryptionMethod);
-                                            } else {
-                                                writeInputStreamsToZip(streams, zipFileOut, excelFileName);
-                                            }
-
-                                            // Clean up the Excel file and create a completion flag
-                                            new File(filePath).delete();
-                                            new File(zipFilePath + ".completed").createNewFile();
-                                        } catch (Exception e) {
-                                            LogUtil.error(getClassName(), e, "Error in zip file creation process: " + e.getMessage());
-                                            throw new RuntimeException("Error in zip file creation process", e);
-                                        }
-                                    }
-
-                                    if (!storeToForm && !downloadAsZip) {
+                                    if (!storeToForm) {
                                         new File(filePath + ".completed").createNewFile();
                                     }
 
@@ -261,8 +226,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         excelDownloadThread.start();
 
                         AppDefinition appDefination = AppUtil.getCurrentAppDefinition();
-                        String fileNameForUrl = downloadAsZip ? excelFileName.replace(".xlsx", ".zip") : excelFileName;
-                        String url = "/jw/web/json/app/" + appDefination.getAppId() + "/" + appDefination.getVersion() + "/plugin/org.joget.marketplace.DownloadCsvOrExcelDatalistAction/service?uniqueId=" + uniqueId + "&filename=" + fileNameForUrl + "&storeToForm=" + getPropertyString("storeToForm") + "&downloadBackgroud=" + getPropertyString("downloadBackgroud");
+                        String url = "/jw/web/json/app/" + appDefination.getAppId() + "/" + appDefination.getVersion() + "/plugin/org.joget.marketplace.DownloadCsvOrExcelDatalistAction/service?uniqueId=" + uniqueId + "&filename=" + excelFileName + "&storeToForm=" + getPropertyString("storeToForm") + "&downloadBackgroud=" + getPropertyString("downloadBackgroud");
                         result.setUrl(url);
 
                     } else {
@@ -314,7 +278,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     private File createCsvFileForStorage(HttpServletRequest request, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String filename) throws IOException {
-        File csvFile = new File(System.getProperty("java.io.tmpdir"), filename);
+        File csvFile = new File(FileManager.getBaseDirectory(), filename);
         try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(csvFile)))) {
             streamCSV(request, null, writer, dataList, dataListRows, rowKeys, getPropertyString("delimiter"));
         }
@@ -322,7 +286,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     private File createExcelFileForStorage(Workbook workbook, String filename) throws IOException {
-        File excelFile = new File(System.getProperty("java.io.tmpdir"), filename);
+        File excelFile = new File(FileManager.getBaseDirectory(), filename);
         try (FileOutputStream fileOut = new FileOutputStream(excelFile)) {
             workbook.write(fileOut);
         }
@@ -366,111 +330,27 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         return dataListRows;
     }
 
-    protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
-        if(getPropertyString("downloadAsZip").equals("true")){
-            // Set the response headers for a zip file
-            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") : "report";
-            response.setContentType("application/zip");
-            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
+    protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList,
+        DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
+        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
+        String delimiter = getPropertyString("delimiter");
+        if (delimiter.isEmpty()) {
+            delimiter = ",";
+        }
+        response.setContentType("text/csv");
+        response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
 
-            try (ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream()) {
-                ArrayList<ByteArrayOutputStream> csvStreams = new ArrayList<>();
-
-                // Generate CSV files and store them in the list
-                for (int i = 0; i < 1; i++) {
-                    ByteArrayOutputStream csvStream = new ByteArrayOutputStream();
-                    streamCSV(request, response, new PrintWriter(new OutputStreamWriter(csvStream)), dataList, dataListRows, rowKeys, ",");
-                    csvStreams.add(csvStream);
-                }
-
-                //Check if user want to encrypt generated zip file
-                if(getPropertyString("encryptZip").equals("false")){
-                    // Create a zip file
-                    writeFilesToZip(csvStreams, zipOutputStream ,filename, ".csv");            
-                }else{
-                    // Create a password-protected zip file
-                    writeFilesToPasswordZip(csvStreams, zipOutputStream , getPropertyString("zipPassword") , filename , getPropertyString("encryptionMethod"), ".csv");
-                }
-
-                response.getOutputStream().write(zipOutputStream.toByteArray());
-
-            }
-        } else {
-            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
-            String delimiter = getPropertyString("delimiter");
-            if (delimiter.isEmpty()) {
-                delimiter = ",";
-            }
-            response.setContentType("text/csv");
-            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
-
-            try ( OutputStream outputStream = response.getOutputStream()) {
-                PrintWriter writer = new PrintWriter(outputStream);
-                streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
-                writer.flush();  // Flush any remaining buffered data
-                outputStream.flush();  // Flush the output stream
-                writer.close();
-            }
+        try (OutputStream outputStream = response.getOutputStream()) {
+            PrintWriter writer = new PrintWriter(outputStream);
+            streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
+            writer.flush(); // Flush any remaining buffered data
+            outputStream.flush(); // Flush the output stream
+            writer.close();
         }
 
     }
-
-    //Write CSV/Excel to Zip
-    protected void writeFilesToZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream , String filename, String csvOrExcel) throws IOException {
-        try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(zipOutputStream)) {
-            for (int i = 0; i < csvStreams.size(); i++) {
-                ByteArrayOutputStream csvStream = csvStreams.get(i);
-                ZipEntry zipEntry = new ZipEntry(filename + "-" + i + csvOrExcel);
-                zipOut.putNextEntry(zipEntry);
-                zipOut.write(csvStream.toByteArray());
-                zipOut.closeEntry();
-                csvStream.close();
-            }
-        }
-    }
-
-    //Write CSV/Excel to password protected zip
-    protected void writeFilesToPasswordZip(ArrayList<ByteArrayOutputStream> csvStreams, ByteArrayOutputStream zipOutputStream, String password, String filename, String encryptionMethod, String csvOrExcel) throws IOException {
-        try (net.lingala.zip4j.io.outputstream.ZipOutputStream zipOut = initializeZipOutputStream(zipOutputStream, true, password.toCharArray())) {
-            for (int i = 0; i < csvStreams.size(); i++) {
-                ByteArrayOutputStream csvStream = csvStreams.get(i);
-                if (encryptionMethod.equals("256")) {
-                    ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true, EncryptionMethod.AES, AesKeyStrength.KEY_STRENGTH_256);
-                    zipParameters.setFileNameInZip(filename + "-" + i + csvOrExcel);
-                    zipOut.putNextEntry(zipParameters);
-                } else if (encryptionMethod.equals("128")) {
-                    ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true, EncryptionMethod.AES, AesKeyStrength.KEY_STRENGTH_128);
-                    zipParameters.setFileNameInZip(filename + "-" + i + csvOrExcel);
-                    zipOut.putNextEntry(zipParameters);
-                }
-                zipOut.write(csvStream.toByteArray());
-                zipOut.closeEntry();
-                csvStream.close();
-            }
-        }
-    }
-
-    //Initalise the Zip Output Stream
-    private net.lingala.zip4j.io.outputstream.ZipOutputStream initializeZipOutputStream(ByteArrayOutputStream outputZipFile, boolean encrypt, char[] password)
-            throws IOException {
-        net.lingala.zip4j.io.outputstream.ZipOutputStream zipOutputStream = new net.lingala.zip4j.io.outputstream.ZipOutputStream(outputZipFile, password);
-        return zipOutputStream;
-    }
-
-    //To build zip parameters
-    private ZipParameters buildZipParameters(CompressionMethod compressionMethod, boolean encrypt,
-            EncryptionMethod encryptionMethod, AesKeyStrength aesKeyStrength) {
-        ZipParameters zipParameters = new ZipParameters();
-        zipParameters.setCompressionMethod(compressionMethod);
-        zipParameters.setEncryptionMethod(encryptionMethod);
-        zipParameters.setAesKeyStrength(aesKeyStrength);
-        zipParameters.setEncryptFiles(encrypt);
-        return zipParameters;
-    }
-
 
     protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String delimiter) throws IOException {
-
         HashMap<String, StringBuilder> labelAndKeys = getLabelAndKey(dataList);
         StringBuilder keySB = labelAndKeys.get("key");
         StringBuilder headerSB = labelAndKeys.get("header");
@@ -675,7 +555,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         if (uniqueId != null && !uniqueId.isEmpty()) {
             if (filename != null && !filename.isEmpty()) {
                 // check for the flag file
-                String path = getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
+                String path = FileManager.getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
                 boolean fileGenerated = checkCompletionFlag(path);
 
                 // Check if both storeToForm and downloadBackground are true
@@ -820,41 +700,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     }
 
     protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
-        if (getPropertyString("downloadAsZip").equals("true")) {
-            // Set the response headers for a zip file
-            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") : "report";
-            response.setContentType("application/zip");
-            response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
-
-            try (ByteArrayOutputStream zipOutputStream = new ByteArrayOutputStream()) {
-                ArrayList<ByteArrayOutputStream> csvStreams = new ArrayList<>();
-
-                // Generate CSV files and store them in the list
-                for (int i = 0; i < 1; i++) {
-                    ByteArrayOutputStream csvStream = new ByteArrayOutputStream();
-                    Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
-                    workbook.write(csvStream);
-                    workbook.close();
-                    csvStreams.add(csvStream);
-                }
-
-                //Check if user want to encrypt generated zip file
-                if (getPropertyString("encryptZip").equals("false")) {
-                    // Create a zip file
-                    writeFilesToZip(csvStreams, zipOutputStream, filename, ".xlsx");
-                } else {
-                    // Create a password-protected zip file
-                    writeFilesToPasswordZip(csvStreams, zipOutputStream, getPropertyString("zipPassword"), filename, getPropertyString("encryptionMethod"), ".xlsx");
-                }
-
-                response.getOutputStream().write(zipOutputStream.toByteArray());
-
-            }
-        } else {
-            Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
-            String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
-            writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
-        }
+        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
+        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
+        writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
 
     private HashMap<String, Integer> findDuplicate(String[] keySB) {
@@ -1006,46 +854,4 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             return ((FormRow) rows.get(x)).get("id").equals(rowKey);
         }
     }
-
-    protected void writeInputStreamsToZip(ArrayList<InputStream> streams, OutputStream zipOutputStream, String filename) throws IOException {
-        try (java.util.zip.ZipOutputStream zipOut = new java.util.zip.ZipOutputStream(zipOutputStream)) {
-            for (int i = 0; i < streams.size(); i++) {
-                InputStream stream = streams.get(i);
-                ZipEntry zipEntry = new ZipEntry(filename);
-                zipOut.putNextEntry(zipEntry);
-                byte[] bytes = new byte[1024];
-                int length;
-                while ((length = stream.read(bytes)) >= 0) {
-                    zipOut.write(bytes, 0, length);
-                }
-                zipOut.closeEntry();
-            }
-        }
-    }
-
-    protected void writeInputStreamsToPasswordZip(ArrayList<InputStream> streams, OutputStream zipOutputStream, String password, String filename, String encryptionMethod) throws IOException {
-        try (net.lingala.zip4j.io.outputstream.ZipOutputStream zipOut = new net.lingala.zip4j.io.outputstream.ZipOutputStream(zipOutputStream, password.toCharArray())) {
-            for (int i = 0; i < streams.size(); i++) {
-                InputStream stream = streams.get(i);
-                ZipParameters zipParameters = buildZipParameters(CompressionMethod.DEFLATE, true,
-                        encryptionMethod.equals("256") ? EncryptionMethod.AES : EncryptionMethod.ZIP_STANDARD,
-                        encryptionMethod.equals("256") ? AesKeyStrength.KEY_STRENGTH_256 : AesKeyStrength.KEY_STRENGTH_128);
-                zipParameters.setFileNameInZip(filename);
-                zipOut.putNextEntry(zipParameters);
-                byte[] bytes = new byte[1024];
-                int length;
-                long totalBytesWritten = 0;
-                while ((length = stream.read(bytes)) >= 0) {
-                    zipOut.write(bytes, 0, length);
-                    totalBytesWritten += length;
-                }
-                zipOut.closeEntry();
-            }
-        } catch (Exception e) {
-            LogUtil.error(getClassName(), e, "Error in writeInputStreamsToPasswordZip: " + e.getMessage());
-            e.printStackTrace();
-            throw new IOException("Error in writeInputStreamsToPasswordZip", e);
-        }
-    }
-
 }
