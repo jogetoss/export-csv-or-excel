@@ -110,27 +110,6 @@
                 "required": "True"
             },
             {
-                "name": "downloadAsZip",
-                "label": "@@datalist.downloadCSVOrExcel.downloadAsZip@@",
-                "type": "selectbox",
-                    {
-                        "value": "true",
-                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
-                    }],
-                "required": "True"
-            },
-                "type": "selectbox",
-                "options": [{
-                        "value": "false",
-                        "label": "@@datalist.downloadCSVOrExcel.no@@"
-                    },
-                    {
-                        "value": "true",
-                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
-                    }],
-                "control_field": "downloadAsZip",
-                "control_value": "true"
-            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },
