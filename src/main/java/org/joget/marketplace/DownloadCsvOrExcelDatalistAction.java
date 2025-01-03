@@ -28,7 +28,6 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -423,9 +422,16 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             stringBuilder.append(delimiter);
         }
 
+        // Remove the trailing delimiter if it exists
+        if (stringBuilder.length() > 0 && stringBuilder.lastIndexOf(delimiter) == stringBuilder.length() - delimiter.length()) {
+            stringBuilder.setLength(stringBuilder.length() - delimiter.length());
+        }
+        
+        String value = stringBuilder.toString();
+
         // Write original CSV content to the output stream
         writer.write("\r\n");
-        writer.write(stringBuilder.toString());
+        writer.write(value);
         writer.flush();
 
     }
