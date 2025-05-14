@@ -1,0 +1,205 @@
+[{
+        "title": "@@tool.downloadCSVOrExcel.config@@",
+        "properties": [
+            {
+                "name" : "listDefId",
+                "label" : "@@tool.downloadCSVOrExcel.listDefId@@",
+                "type" : "selectbox",
+                "required" : "True",
+                "options_ajax" : "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/datalist/options"
+            },
+            {
+                "name" : "recordId",
+                "label" : "@@tool.downloadCSVOrExcel.recordId@@",
+                "type" : "textfield",
+                "description" : "@@tool.downloadCSVOrExcel.recordId.desc@@"
+            },
+            {
+                "name": "downloadAs",
+                "label": "@@tool.downloadCSVOrExcel.downloadAs@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "csv",
+                        "label": "@@tool.downloadCSVOrExcel.csv@@"
+                    },
+                    {
+                        "value": "excel",
+                        "label": "@@tool.downloadCSVOrExcel.excel@@"
+                    }],
+                "required": "True"
+            },
+            {
+                "name": "delimiter",
+                "label": "@@tool.downloadCSVOrExcel.delimiter@@",
+                "control_field": "downloadAs",
+                "control_value": "csv",
+                "type": "textfield",
+                "value": ","
+            },
+            {
+                "name": "footerHeader",
+                "label": "@@tool.downloadCSVOrExcel.footerHeaderColumn@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
+                "label": "@@tool.downloadCSVOrExcel.advancedSetting@@",
+                "type": "header"
+            },
+            {
+                "name": "includeCustomHeader",
+                "label": "@@tool.downloadCSVOrExcel.includeCustomHeader@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
+                "name": "headerDecorator",
+                "label": "@@tool.downloadCSVOrExcel.headerDecorator@@",
+                "control_field": "includeCustomHeader",
+                "control_value": "true",
+                "type": "textarea"
+            },
+            {
+                "name": "includeCustomFooter",
+                "label": "@@tool.downloadCSVOrExcel.includeCustomFooter@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
+                "name": "footerDecorator",
+                "label": "@@tool.downloadCSVOrExcel.footerDecorator@@",
+                "control_field": "includeCustomFooter",
+                "control_value": "true",
+                "type": "textarea"
+            },
+            {
+                "label": "@@tool.downloadCSVOrExcel.fileSetting@@",
+                "type": "header"
+            },
+            {
+                "name": "renameFile",
+                "label": "@@tool.downloadCSVOrExcel.renameFile@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
+                "name": "filename",
+                "label": "@@tool.downloadCSVOrExcel.filename@@",
+                "control_field": "renameFile",
+                "control_value": "true",
+                "type": "textfield",
+                "description": "@@tool.downloadCSVOrExcel.filename.desc@@"
+            },
+            {
+                "label": "@@tool.downloadCSVOrExcel.downloadSetting@@",
+                "type": "header",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "downloadBackgroud",
+                "label": "@@tool.downloadCSVOrExcel.downloadBackgroud@@",
+                "description": "@@tool.downloadCSVOrExcel.downloadBackgroud.desc@@",
+                "control_field": "downloadAs",
+                "control_value": "excel",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }
+                ]
+            },
+
+            {
+                "label": "@@tool.downloadCSVOrExcel.fileOutput@@",
+                "type": "header"
+            },
+            {
+                "name":"pathOptions",
+                "label":"@@tool.downloadCSVOrExcel.pathOptions@@",
+                "type":"selectbox",
+                "required":"True",
+                "options":[
+                   {
+                     "value": "",
+                     "label": ""
+                   },   
+                   {
+                     "value":"FILE_PATH",
+                     "label":"Enter File Path"
+                   },
+                   {
+                     "value":"FORM_FIELD",
+                     "label":"Form Field"
+                   }
+                ]
+            },
+            {
+                "name": "filePath",
+                "label": "@@tool.downloadCSVOrExcel.filePath@@",
+                "type": "textfield",
+                "required": "True",
+                "control_field":"pathOptions",
+                "control_value":"FILE_PATH",
+                "control_use_regex":"true"
+            },
+            {
+                "name": "formDefId",
+                "label": "@@tool.downloadCSVOrExcel.formDefId@@",
+                "type": "selectbox",
+                "required": "True",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
+                "control_field": "pathOptions",
+                "control_value": "FORM_FIELD",
+                "control_use_regex":"true"
+            },
+            {
+                "name": "fileFieldId",
+                "label": "@@tool.downloadCSVOrExcel.fileFieldId@@",
+                "type": "selectbox",
+                "options_ajax_on_change": "formDefId",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/form/columns/options",
+                "required": "True",
+                "control_field": "pathOptions",
+                "control_value": "FORM_FIELD",
+                "control_use_regex":"true"
+            }
+        ]
+    }
+]

@@ -1,4 +1,4 @@
-package org.joget.marketplace;
+package org.joget.marketplace.util;
 
 import java.util.HashMap;
 

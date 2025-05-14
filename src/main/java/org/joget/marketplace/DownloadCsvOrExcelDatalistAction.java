@@ -1,62 +1,28 @@
 package org.joget.marketplace;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.joget.apps.app.service.AppPluginUtil;
 import org.joget.apps.app.service.AppUtil;
 import org.joget.apps.datalist.model.DataList;
-import org.joget.apps.datalist.model.DataListColumn;
-import org.joget.apps.datalist.model.DataListColumnFormat;
 import org.joget.apps.datalist.model.DataListActionDefault;
 import org.joget.apps.datalist.model.DataListActionResult;
 import org.joget.apps.datalist.model.DataListCollection;
-import org.joget.apps.datalist.service.DataListService;
-import org.joget.apps.form.model.FormRow;
 import org.joget.commons.util.FileManager;
 import org.joget.commons.util.LogUtil;
 import org.joget.workflow.util.WorkflowUtil;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.ByteArrayOutputStream;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.net.URLEncoder;
-import java.text.DecimalFormat;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.poi.ss.usermodel.Cell;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import org.apache.commons.lang3.math.NumberUtils;
 import org.joget.apps.app.model.AppDefinition;
-import org.joget.apps.app.service.AppService;
-import org.joget.apps.datalist.model.DataListFilterQueryObject;
-import org.joget.apps.form.model.FormRowSet;
-import org.joget.apps.form.service.FileUtil;
-import org.joget.apps.form.service.FormUtil;
 import org.joget.commons.util.PluginThread;
 import org.joget.commons.util.UuidGenerator;
-import org.joget.plugin.base.PluginWebSupport;
-import org.joget.workflow.model.service.WorkflowUserManager;
+import org.joget.marketplace.util.DownloadCsvOrExcelUtil;
 
-public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault implements PluginWebSupport {
-
-    private final DuplicateAndSkip duplicates = new DuplicateAndSkip();
-
-    private static Map<String, Object> data;
+public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault{
 
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
@@ -67,7 +33,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
     @Override
     public String getVersion() {
-        return "8.0.11";
+        return "8.0.12";
     }
 
     @Override
@@ -136,23 +102,20 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         return downloadAs.equalsIgnoreCase("csv");
     }
 
-    public boolean getFooter() {
-        String footer = getPropertyString("footerHeader");
-        return footer.equalsIgnoreCase("true");
-    }
-
-    public boolean includeCustomHeader() {
-        String header = getPropertyString("includeCustomHeader");
-        return header.equalsIgnoreCase("true");
-    }
-
-    public boolean includeCustomFooter() {
-        String footer = getPropertyString("includeCustomFooter");
-        return footer.equalsIgnoreCase("true");
-    }
-
     @Override
     public DataListActionResult executeAction(final DataList dataList, String[] rowKeys) {
+        String renameFile = getPropertyString("renameFile");
+        String fileName = getPropertyString("filename");
+        String delimiter = getPropertyString("delimiter");
+        String headerDecorator = getPropertyString("headerDecorator"); 
+        String downloadAllWhenNoneSelected = getPropertyString("downloadAllWhenNoneSelected"); 
+        String footerDecorator = getPropertyString("footerDecorator");
+        String includeCustomHeader = getPropertyString("includeCustomHeader"); 
+        String footerHeader = getPropertyString("footerHeader"); 
+        String includeCustomFooter = getPropertyString("includeCustomFooter");
+        String formDefId = getPropertyString("formDefId");
+        String fileFieldId = getPropertyString("fileFieldId");
+
         // only allow POST
         DataListActionResult result = new DataListActionResult();
         result.setType(DataListActionResult.TYPE_REDIRECT);
@@ -168,16 +131,16 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                 boolean storeToForm = "true".equalsIgnoreCase(getPropertyString("storeToForm"));
 
                 if (getDownloadAs()) {
-                    DataListCollection dataListRows = getDataListRows(dataList, rowKeys, false);
+                    DataListCollection dataListRows = DownloadCsvOrExcelUtil.getDataListRows(dataList, rowKeys, false);
 
                     // Check if storeToForm is enabled; skip download if true
                     if (!storeToForm) {
-                        downloadCSV(request, response, dataList, dataListRows, rowKeys);
+                        DownloadCsvOrExcelUtil.downloadCSV(request, response, dataList, dataListRows, rowKeys, renameFile, fileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
                     }
 
                     // Store CSV to form if enabled (separate from download)
                     if (storeToForm) {
-                        storeCSVToForm(request, dataList, dataListRows, rowKeys);
+                        DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, dataListRows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter);
                     }
                 } else {
                     String downloadBackgroud = getPropertyString("downloadBackgroud");
@@ -195,9 +158,9 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                             public void run() {
                                 AppUtil.setCurrentAppDefinition(appDef);
                                 dataList.setUseSession(false);
-                                DataListCollection rows = getDataListRows(dataList, rowKeys, true);
+                                DataListCollection rows = DownloadCsvOrExcelUtil.getDataListRows(dataList, rowKeys, true);
                                 //DataListCollection rows = dataList.getRows(50000000, null);
-                                Workbook workbook = getExcel(dataList, rows, rowKeys, true);
+                                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
                                 String filePath = excelFolder.getPath() + File.separator + excelFileName;
 
                                 try {
@@ -209,7 +172,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                                     if (storeToForm) {
                                         new File(filePath + ".completed").createNewFile();
-                                        storeExcelToForm(workbook, excelFileName);
+                                        DownloadCsvOrExcelUtil.storeExcelToForm(workbook, excelFileName, renameFile, formDefId, fileFieldId);
                                     }
 
                                     if (!storeToForm) {
@@ -230,16 +193,16 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                     } else {
                         // not in the backgroud, get the rows
-                        DataListCollection rows = getDataListRows(dataList, rowKeys, false);
-                        Workbook workbook = getExcel(dataList, rows, rowKeys, false);
+                        DataListCollection rows = DownloadCsvOrExcelUtil.getDataListRows(dataList, rowKeys, false);
+                        Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
 
                         if (storeToForm) {
-                            storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx");
+                            DownloadCsvOrExcelUtil.storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx", renameFile, formDefId, fileFieldId);
 
                         }
 
                         if (!storeToForm) {
-                            downloadExcel(request, response, dataList, rows, rowKeys);
+                            DownloadCsvOrExcelUtil.downloadExcel(request, response, dataList, rows, rowKeys, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, renameFile,  fileName, includeCustomHeader, footerHeader, includeCustomFooter);
                         }
                     }
                 }
@@ -250,614 +213,5 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             }
         }
         return result;
-    }
-
-    private void storeCSVToForm(HttpServletRequest request, DataList dataList, DataListCollection dataListRows, String[] rowKeys) {
-        try {
-            String csvFileName = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
-
-            File csvFile = createCsvFileForStorage(request, dataList, dataListRows, rowKeys, csvFileName);
-            storeGeneratedFile(csvFile, getPropertyString("formDefId"), getPropertyString("fileFieldId"));
-            csvFile.delete();
-        } catch (IOException e) {
-            LogUtil.error(getClassName(), e, "Failed to store CSV to form");
-        }
-    }
-
-    private void storeExcelToForm(Workbook workbook, String filename) {
-        try {
-            String excelFileName = getPropertyString("renameFile").equalsIgnoreCase("true") ? filename : "report.xlsx";
-
-            File excelFile = createExcelFileForStorage(workbook, excelFileName);
-            storeGeneratedFile(excelFile, getPropertyString("formDefId"), getPropertyString("fileFieldId"));
-            excelFile.delete();
-        } catch (IOException e) {
-            LogUtil.error(getClassName(), e, "Failed to store Excel to form");
-        }
-    }
-
-    private File createCsvFileForStorage(HttpServletRequest request, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String filename) throws IOException {
-        File csvFile = new File(FileManager.getBaseDirectory(), filename);
-        try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(csvFile)))) {
-            streamCSV(request, null, writer, dataList, dataListRows, rowKeys, getPropertyString("delimiter"));
-        }
-        return csvFile;
-    }
-
-    private File createExcelFileForStorage(Workbook workbook, String filename) throws IOException {
-        File excelFile = new File(FileManager.getBaseDirectory(), filename);
-        try (FileOutputStream fileOut = new FileOutputStream(excelFile)) {
-            workbook.write(fileOut);
-        }
-        return excelFile;
-    }
-
-    private void storeGeneratedFile(File generatedFile, String formDefId, String fileFieldId) {
-        try {
-            AppService appService = (AppService) FormUtil.getApplicationContext().getBean("appService");
-            AppDefinition appDef = AppUtil.getCurrentAppDefinition();
-
-            String recordId = UuidGenerator.getInstance().getUuid();
-            String tableName = appService.getFormTableName(appDef, formDefId);
-
-            FileUtil.storeFile(generatedFile, tableName, recordId);
-
-            FormRowSet rows = new FormRowSet();
-            FormRow row = new FormRow();
-            row.setId(recordId);
-            row.put(fileFieldId, generatedFile.getName());
-            rows.add(row);
-
-            appService.storeFormData(formDefId, tableName, rows, recordId);
-        } catch (Exception e) {
-            LogUtil.error(getClassName(), e, "Failed to store the generated file in the form.");
-        }
-    }
-
-    private DataListCollection getDataListRows(DataList dataList, String[] rowKeys, boolean background) {
-        DataListCollection dataListRows = null;
-        if (rowKeys != null && rowKeys.length > 0) {
-            addDataListFilter(dataList, rowKeys);
-            dataListRows = dataList.getRows();
-        } else {
-            if (background) {
-                dataListRows = dataList.getRows(50000000, null);
-            } else {
-                dataListRows = dataList.getRows(0, 0);
-            }
-        }
-        return dataListRows;
-    }
-
-    protected void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList,
-        DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
-        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".csv" : "report.csv";
-        String delimiter = getPropertyString("delimiter");
-        if (delimiter.isEmpty()) {
-            delimiter = ",";
-        }
-        response.setContentType("text/csv");
-        response.setHeader("Content-Disposition", "attachment; filename=" + filename + "");
-
-        try (OutputStream outputStream = response.getOutputStream()) {
-            PrintWriter writer = new PrintWriter(outputStream);
-            streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter);
-            writer.flush(); // Flush any remaining buffered data
-            outputStream.flush(); // Flush the output stream
-            writer.close();
-        }
-
-    }
-
-    protected void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String delimiter) throws IOException {
-        HashMap<String, StringBuilder> labelAndKeys = getLabelAndKey(dataList);
-        StringBuilder keySB = labelAndKeys.get("key");
-        StringBuilder headerSB = labelAndKeys.get("header");
-
-        String[] keys = keySB.toString().split(",", 0);
-        duplicates.setMap(findDuplicate(keys));
-
-        if (includeCustomHeader()) {
-            writer.write((getPropertyString("headerDecorator") + "\n"));
-        }
-
-        if (delimiter != null && !delimiter.isEmpty()) {
-            String replacedString = headerSB.toString().replace(",", delimiter);
-            headerSB.setLength(0);
-            headerSB.append(replacedString);
-        }
-
-        writer.write((headerSB + ""));
-
-        if (rowKeys != null && rowKeys.length > 0) {
-            //goes through all the datalist row
-            for (int x = 0; x < dataListRows.size(); x++) {
-                //compare with all the rowkeys that have been selected
-                for (String rowKey : rowKeys) {
-
-                    //check instance of HashMap if not it will be Formrow
-                    boolean boolInstance = dataListRows.get(x) instanceof HashMap;
-                    boolean foundRowKey = foundRowKey(boolInstance, dataListRows, x, rowKey);
-
-                    //if no row is found skip
-                    if (!foundRowKey) {
-                        continue;
-                    }
-
-                    Object row = getRow(dataListRows, x);
-
-                    //get the keys and save it
-                    writeCSVContents(dataList, null, keys, row, writer, delimiter);
-                }
-            }
-
-        } else if (getProperty("downloadAllWhenNoneSelected").equals("true")) {
-            for (int x = 0; x < dataListRows.size(); x++) {
-                Object row = getRow(dataListRows, x);
-                //get the keys and save it
-                writeCSVContents(dataList, null, keys, row, writer, delimiter);
-            }
-        }
-        if (getFooter()) {
-            writer.write("\n");
-            writer.write((headerSB + "\n"));
-        }
-        if (includeCustomFooter()) {
-            writer.write("\n");
-            writer.write((getPropertyString("footerDecorator") + "\n"));
-        }
-    }
-
-    private void writeCSVContents(DataList dataList, ByteArrayOutputStream outputStream, String[] keys, Object row, PrintWriter writer, String delimiter) throws IOException {
-        // Construct CSV content
-        StringBuilder stringBuilder = new StringBuilder();
-        for (String value : keys) {
-            String formattedValue = getBinderFormattedValue(dataList, row, value);
-
-            if (formattedValue != null && formattedValue.contains(delimiter)) {
-                formattedValue = "\"" + formattedValue + "\"";
-            }
-
-            stringBuilder.append(formattedValue);
-            stringBuilder.append(delimiter);
-        }
-
-        // Remove the trailing delimiter if it exists
-        if (stringBuilder.length() > 0 && stringBuilder.lastIndexOf(delimiter) == stringBuilder.length() - delimiter.length()) {
-            stringBuilder.setLength(stringBuilder.length() - delimiter.length());
-        }
-        
-        String value = stringBuilder.toString();
-
-        // Write original CSV content to the output stream
-        writer.write("\r\n");
-        writer.write(value);
-        writer.flush();
-
-    }
-
-    protected Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background) {
-        HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
-        StringBuilder keySB = sb.get("key");
-        StringBuilder headerSB = sb.get("header");
-        int counter = 0;
-        int rowCounter = 0;
-
-        Workbook workbook = new XSSFWorkbook();
-        Sheet sheet = workbook.createSheet("Report");
-        Row headerRow = sheet.createRow(rowCounter);
-        String[] res = keySB.toString().split(",", 0);
-        String[] header = headerSB.toString().split(",", 0);
-        duplicates.setMap(findDuplicate(res));
-
-        if (includeCustomHeader()) {
-            Cell titleCell = headerRow.createCell(0);
-            String headerString = getPropertyString("headerDecorator");
-            titleCell.setCellValue(headerString);
-            int getNewLine = headerString.split("\r\n|\r|\n").length;
-            headerRow.setHeightInPoints((getNewLine * sheet.getDefaultRowHeightInPoints()));
-
-            if (header.length >= 2) {
-                sheet.autoSizeColumn(2);
-                sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, header.length - 1));
-            }
-            rowCounter += 1;
-        }
-
-        Row headerColumnRow = sheet.createRow(rowCounter);
-        counter = 0;
-        for (String value : header) {
-            Cell headerCell = headerColumnRow.createCell(counter);
-            headerCell.setCellValue(value);
-            counter += 1;
-        }
-
-        rowCounter += 1;
-        counter = 0;
-
-        if (rowKeys != null && rowKeys.length > 0) {
-            for (int x = 0; x < rows.size(); x++) {
-                //compare with all the rowkeys that have been selected
-                for (int y = 0; y < rowKeys.length; y++) {
-                    boolean boolInstance = rows.get(x) instanceof HashMap;
-                    boolean foundRowKey = foundRowKey(boolInstance, rows, x, rowKeys[y]);
-
-                    if (!foundRowKey) {
-                        continue;
-                    }
-                    printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
-                    counter += 1;
-                    rowCounter += 1;
-                }
-            }
-
-        } else if (getProperty("downloadAllWhenNoneSelected").equals("true")) {
-            for (int x = 0; x < rows.size(); x++) {
-                printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
-                counter += 1;
-                rowCounter += 1;
-            }
-        }
-
-        if (getFooter()) {
-            int z = 0;
-            Row dataRow = sheet.createRow(rowCounter);
-            for (String myStr : header) {
-                Cell footerCell = dataRow.createCell(z);
-                footerCell.setCellValue(myStr);
-                z += 1;
-            }
-            rowCounter += 1;
-        }
-
-        if (includeCustomFooter()) {
-            Row footerColumnRow = sheet.createRow(rowCounter);
-            Cell titleCell = footerColumnRow.createCell(0);
-            titleCell.setCellValue(getPropertyString("footerDecorator"));
-
-            if (header.length >= 2) {
-                sheet.addMergedRegion(new CellRangeAddress(rowCounter, rowCounter, 0, header.length - 1));
-            }
-        }
-
-        return workbook;
-
-    }
-
-    public void addDataListFilter(DataList dataList, String[] rowKeys) {
-        if (!dataList.isUseSession()) {
-            DataListFilterQueryObject filterKeys = new DataListFilterQueryObject();
-            filterKeys.setOperator("AND");
-            String column = dataList.getBinder().getColumnName(dataList.getBinder().getPrimaryKeyColumnName());
-            String query = "";
-            for (int i = 0; i < rowKeys.length; i++) {
-                if (!query.isEmpty()) {
-                    query += ",";
-                }
-                query += "?";
-            }
-            filterKeys.setQuery(column + " IN (" + query + ")");
-            filterKeys.setValues(rowKeys);
-            dataList.addFilterQueryObject(filterKeys);
-        }
-
-    }
-
-    @Override
-    public void webService(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-
-        boolean roleAnonymous = WorkflowUtil.isCurrentUserInRole(WorkflowUserManager.ROLE_ANONYMOUS);
-        if (roleAnonymous) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
-            return;
-        }
-
-        String uniqueId = request.getParameter("uniqueId");
-        String filename = request.getParameter("filename");
-        String status = request.getParameter("status");
-        boolean storeToForm = Boolean.parseBoolean(request.getParameter("storeToForm"));  // Assuming this parameter exists
-        boolean downloadBackground = Boolean.parseBoolean(request.getParameter("downloadBackgroud"));  // Assuming this parameter exists
-
-        if (uniqueId != null && !uniqueId.isEmpty()) {
-            if (filename != null && !filename.isEmpty()) {
-                // check for the flag file
-                String path = FileManager.getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
-                boolean fileGenerated = checkCompletionFlag(path);
-
-                // Check if both storeToForm and downloadBackground are true
-                if (storeToForm && downloadBackground) {
-
-                    if (fileGenerated && "stored".equalsIgnoreCase(status)) {
-                        File file = new File(path);
-                        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                        response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
-                        OutputStream outputStream;
-                        try (InputStream inputStream = new FileInputStream(file)) {
-                            outputStream = response.getOutputStream();
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
-                            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                                outputStream.write(buffer, 0, bytesRead);
-                                outputStream.flush();
-                            }
-                        }
-                        outputStream.close();
-
-                    } else if (fileGenerated) {
-
-                        //datalist.downloadCSVOrExcel.downloadCompleteMessage
-                        String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessageStoretoform", getClassName(), MESSAGE_PATH);
-                        String flagParam = "status=generated"; // Replace with your desired parameter and value
-                        String currentURL = request.getRequestURL().toString();
-
-                        if (request.getQueryString() != null) {
-                            currentURL += "?" + request.getQueryString() + "&" + flagParam;
-                        } else {
-                            currentURL += "?" + flagParam;
-                        }
-
-                        String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
-                                + "<script>\n"
-                                + "  setTimeout(function() {\n"
-                                + "    location.href = '" + currentURL + "';\n"
-                                + "  }, 3000); // Redirect after 3 seconds\n"
-                                + "</script>";
-
-                        response.setContentType("text/html");
-                        response.setCharacterEncoding("UTF-8");
-                        try {
-                            response.getWriter().write(javascript);
-                            response.flushBuffer();
-                        } catch (IOException ex) {
-                            LogUtil.error(getClassName(), ex, ex.getMessage());
-                        }
-
-                    } else {
-                        String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                        String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h2>" + message + "</h2></marquee>"
-                                + "<script>\n"
-                                + "  setTimeout(function() {\n"
-                                + "    location.reload();\n"
-                                + "  }, 10000); // Reload after 10 seconds\n"
-                                + "</script>";
-
-                        response.setContentType("text/html");
-                        response.setCharacterEncoding("UTF-8");
-                        try {
-                            response.getWriter().write(javascript);
-                            response.flushBuffer();
-                        } catch (IOException ex) {
-                            LogUtil.error(getClassName(), ex, ex.getMessage());
-                        }
-
-                    }
-
-                } else if (fileGenerated && "generated".equalsIgnoreCase(status)) {
-                    File file = new File(path);
-                    response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                    response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
-                    OutputStream outputStream;
-                    try (InputStream inputStream = new FileInputStream(file)) {
-                        outputStream = response.getOutputStream();
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        while ((bytesRead = inputStream.read(buffer)) != -1) {
-                            outputStream.write(buffer, 0, bytesRead);
-                            outputStream.flush();
-                        }
-                    }
-                    outputStream.close();
-
-                } else if (fileGenerated) {
-
-                    //datalist.downloadCSVOrExcel.downloadCompleteMessage
-                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessage", getClassName(), MESSAGE_PATH);
-                    String flagParam = "status=generated"; // Replace with your desired parameter and value
-                    String currentURL = request.getRequestURL().toString();
-
-                    if (request.getQueryString() != null) {
-                        currentURL += "?" + request.getQueryString() + "&" + flagParam;
-                    } else {
-                        currentURL += "?" + flagParam;
-                    }
-
-                    String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
-                            + "<script>\n"
-                            + "  setTimeout(function() {\n"
-                            + "    location.href = '" + currentURL + "';\n"
-                            + "  }, 3000); // Redirect after 3 seconds\n"
-                            + "</script>";
-
-                    response.setContentType("text/html");
-                    response.setCharacterEncoding("UTF-8");
-                    try {
-                        response.getWriter().write(javascript);
-                        response.flushBuffer();
-                    } catch (IOException ex) {
-                        LogUtil.error(getClassName(), ex, ex.getMessage());
-                    }
-
-                } else {
-                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                    String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h2>" + message + "</h2></marquee>"
-                            + "<script>\n"
-                            + "  setTimeout(function() {\n"
-                            + "    location.reload();\n"
-                            + "  }, 10000); // Reload after 10 seconds\n"
-                            + "</script>";
-
-                    response.setContentType("text/html");
-                    response.setCharacterEncoding("UTF-8");
-                    try {
-                        response.getWriter().write(javascript);
-                        response.flushBuffer();
-                    } catch (IOException ex) {
-                        LogUtil.error(getClassName(), ex, ex.getMessage());
-                    }
-
-                }
-            }
-        }
-    }
-
-    private boolean checkCompletionFlag(String path) {
-        File flagFile = new File(path + ".completed");
-        return flagFile.exists();
-    }
-
-    protected void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false);
-        String filename = getPropertyString("renameFile").equalsIgnoreCase("true") ? getPropertyString("filename") + ".xlsx" : "report.xlsx";
-        writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
-    }
-
-    private HashMap<String, Integer> findDuplicate(String[] keySB) {
-        Set<String> seen = new HashSet<>();
-        HashMap<String, Integer> duplicates = new HashMap<>();
-
-        for (String str : keySB) {
-            if (seen.contains(str)) {
-                if (!duplicates.containsKey(str)) {
-                    duplicates.put(str, 1);
-                } else {
-                    duplicates.put(str, duplicates.get(str) + 1);
-                }
-            } else {
-                seen.add(str);
-            }
-        }
-        return duplicates;
-    }
-
-    protected void writeResponseExcel(HttpServletRequest request, HttpServletResponse response, Workbook workbook, String filename, String contentType) throws IOException, ServletException {
-        OutputStream out = response.getOutputStream();
-        try {
-            String name = URLEncoder.encode(filename, "UTF8").replaceAll("\\+", "%20");
-            response.setHeader("Content-Disposition", "attachment; filename=" + name + "; filename*=UTF-8''" + name);
-            response.setContentType(contentType + "; charset=UTF-8");
-
-            ByteArrayOutputStream ms = new ByteArrayOutputStream();
-            workbook.write(ms);
-
-            byte bytes[] = ms.toByteArray();
-            if (bytes.length > 0) {
-                response.setContentLength(bytes.length);
-                out.write(bytes);
-            }
-
-        } finally {
-            out.flush();
-            out.close();
-            request.getRequestDispatcher(filename).forward(request, response);
-        }
-    }
-
-    protected String getBinderFormattedValue(DataList dataList, Object o, String name) {
-        DataListColumn[] columns = dataList.getColumns();
-        int skip = duplicates.getSkipCount(name);
-        for (DataListColumn c : columns) {
-            if (c.getName().equalsIgnoreCase(name)) {
-
-                if (duplicates.checkKey(name)) {
-                    if (duplicates.skipCountLessThenDuplicate(name)) {
-                        duplicates.addSkipCount(name);
-                    }
-                    if (skip != 0) {
-                        skip -= 1;
-                        continue;
-                    }
-                }
-
-                String value;
-                try {
-                    value = DataListService.evaluateColumnValueFromRow(o, name).toString();
-                    Collection<DataListColumnFormat> formats = c.getFormats();
-                    if (formats != null) {
-                        for (DataListColumnFormat f : formats) {
-                            if (f != null) {
-                                value = f.format(dataList, c, o, value);
-                                String stripHTML = value.replaceAll("<[^>]*>", "");
-                                return stripHTML;
-                            } else {
-                                return value;
-                            }
-                        }
-                    } else {
-                        return value;
-                    }
-                } catch (Exception ex) {
-
-                }
-            }
-        }
-        return "";
-    }
-
-    protected HashMap<String, StringBuilder> getLabelAndKey(DataList dataList) {
-        HashMap<String, StringBuilder> sb = new HashMap<>();
-        StringBuilder headerSB = new StringBuilder();
-        StringBuilder keySB = new StringBuilder();
-
-        for (DataListColumn column : dataList.getColumns()) {
-            String header = column.getLabel();
-            String key = column.getName();
-
-            String excludeExport = column.getPropertyString("exclude_export");
-            String includeExport = column.getPropertyString("include_export");
-            boolean hidden = column.isHidden();
-
-            if ((hidden && "true".equalsIgnoreCase(includeExport)) || (!hidden && !"true".equalsIgnoreCase(excludeExport))) {
-                headerSB.append(header).append(",");
-                keySB.append(key).append(",");
-            }
-        }
-        headerSB.setLength(headerSB.length() - 1);
-        keySB.setLength(keySB.length() - 1);
-
-        sb.put("header", headerSB);
-        sb.put("key", keySB);
-        return sb;
-    }
-
-    private void printExcel(Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList) {
-        Row dataRow = sheet.createRow(rowCounter);
-        Object row = getRow(rows, x);
-        int z = 0;
-        for (String myStr : res) {
-            String value = getBinderFormattedValue(dataList, row, myStr);
-            Cell dataRowCell = dataRow.createCell(z);
-            if (NumberUtils.isParsable(value)) {
-                double numericValue = Double.parseDouble(value);
-                if (isWholeNumber(numericValue)) {
-                    // If the numeric value is a whole number, format it to display without decimal points
-                    DecimalFormat decimalFormat = new DecimalFormat("#");
-                    value = decimalFormat.format(numericValue);
-                } else {
-                    // If the numeric value has decimal points, set it directly
-                    value = Double.toString(numericValue);
-                }
-                dataRowCell.setCellValue(value);
-            } else {
-                dataRowCell.setCellValue(value);
-            }
-            z += 1;
-        }
-    }
-
-    private boolean isWholeNumber(double value) {
-        // Check if the value is a whole number (i.e., has no decimal points)
-        return value == Math.floor(value) && !Double.isInfinite(value);
-    }
-
-    private Object getRow(DataListCollection rows, int x) {
-        return rows.get(x);
-    }
-
-    private boolean foundRowKey(boolean boolInstance, DataListCollection rows, int x, String rowKey) {
-        if (boolInstance) {
-            return ((HashMap) rows.get(x)).get("id").equals(rowKey);
-        } else {
-            return ((FormRow) rows.get(x)).get("id").equals(rowKey);
-        }
     }
 }
