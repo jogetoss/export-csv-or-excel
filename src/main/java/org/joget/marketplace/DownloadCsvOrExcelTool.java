@@ -35,7 +35,7 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
 
     @Override
     public String getVersion() {
-        return "8.0.12";
+        return Activator.VERSION;
     }
 
     @Override

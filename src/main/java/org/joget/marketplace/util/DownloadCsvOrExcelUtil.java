@@ -33,26 +33,19 @@ import java.util.HashMap;
 import java.util.Map;
 import org.apache.poi.ss.usermodel.Cell;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.joget.apps.app.model.AppDefinition;
-import org.joget.apps.app.service.AppPluginUtil;
 import org.joget.apps.app.service.AppService;
-import org.joget.apps.datalist.model.DataListFilterQueryObject;
 import org.joget.apps.form.model.FormRowSet;
 import org.joget.apps.form.service.FileUtil;
 import org.joget.apps.form.service.FormUtil;
 import org.joget.commons.util.UuidGenerator;
-import org.joget.plugin.base.PluginWebSupport;
-import org.joget.workflow.model.service.WorkflowUserManager;
-import org.joget.workflow.util.WorkflowUtil;
 
-public class DownloadCsvOrExcelUtil implements PluginWebSupport {
+public class DownloadCsvOrExcelUtil {
 
     private final static DuplicateAndSkip duplicates = new DuplicateAndSkip();
 
@@ -124,21 +117,6 @@ public class DownloadCsvOrExcelUtil implements PluginWebSupport {
         } catch (Exception e) {
             LogUtil.error(getClassName(), e, "Failed to store the generated file in the form.");
         }
-    }
-
-    public static DataListCollection getDataListRows(DataList dataList, String[] rowKeys, boolean background) {
-        DataListCollection dataListRows = null;
-        if (rowKeys != null && rowKeys.length > 0) {
-            addDataListFilter(dataList, rowKeys);
-            dataListRows = dataList.getRows();
-        } else {
-            if (background) {
-                dataListRows = dataList.getRows(50000000, null);
-            } else {
-                dataListRows = dataList.getRows(0, 0);
-            }
-        }
-        return dataListRows;
     }
 
     public static File generateCSVFile(DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter) throws Exception {
@@ -370,25 +348,6 @@ public class DownloadCsvOrExcelUtil implements PluginWebSupport {
 
     }
 
-    protected static void addDataListFilter(DataList dataList, String[] rowKeys) {
-        if (!dataList.isUseSession()) {
-            DataListFilterQueryObject filterKeys = new DataListFilterQueryObject();
-            filterKeys.setOperator("AND");
-            String column = dataList.getBinder().getColumnName(dataList.getBinder().getPrimaryKeyColumnName());
-            String query = "";
-            for (int i = 0; i < rowKeys.length; i++) {
-                if (!query.isEmpty()) {
-                    query += ",";
-                }
-                query += "?";
-            }
-            filterKeys.setQuery(column + " IN (" + query + ")");
-            filterKeys.setValues(rowKeys);
-            dataList.addFilterQueryObject(filterKeys);
-        }
-
-    }
-
     public static boolean checkCompletionFlag(String path) {
         File flagFile = new File(path + ".completed");
         return flagFile.exists();
@@ -567,164 +526,6 @@ public class DownloadCsvOrExcelUtil implements PluginWebSupport {
 
     public static String getClassName() {
         return "DownloadCsvOrExcelUtil";
-    }
-
-
-    @Override
-    public void webService(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-
-        boolean roleAnonymous = WorkflowUtil.isCurrentUserInRole(WorkflowUserManager.ROLE_ANONYMOUS);
-        if (roleAnonymous) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
-            return;
-        }
-
-        String uniqueId = request.getParameter("uniqueId");
-        String filename = request.getParameter("filename");
-        String status = request.getParameter("status");
-        boolean storeToForm = Boolean.parseBoolean(request.getParameter("storeToForm"));  // Assuming this parameter exists
-        boolean downloadBackground = Boolean.parseBoolean(request.getParameter("downloadBackgroud"));  // Assuming this parameter exists
-
-        if (uniqueId != null && !uniqueId.isEmpty()) {
-            if (filename != null && !filename.isEmpty()) {
-                // check for the flag file
-                String path = FileManager.getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
-                boolean fileGenerated = DownloadCsvOrExcelUtil.checkCompletionFlag(path);
-
-                // Check if both storeToForm and downloadBackground are true
-                if (storeToForm && downloadBackground) {
-
-                    if (fileGenerated && "stored".equalsIgnoreCase(status)) {
-                        File file = new File(path);
-                        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                        response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
-                        OutputStream outputStream;
-                        try (InputStream inputStream = new FileInputStream(file)) {
-                            outputStream = response.getOutputStream();
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
-                            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                                outputStream.write(buffer, 0, bytesRead);
-                                outputStream.flush();
-                            }
-                        }
-                        outputStream.close();
-
-                    } else if (fileGenerated) {
-
-                        //datalist.downloadCSVOrExcel.downloadCompleteMessage
-                        String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessageStoretoform", getClassName(), MESSAGE_PATH);
-                        String flagParam = "status=generated"; // Replace with your desired parameter and value
-                        String currentURL = request.getRequestURL().toString();
-
-                        if (request.getQueryString() != null) {
-                            currentURL += "?" + request.getQueryString() + "&" + flagParam;
-                        } else {
-                            currentURL += "?" + flagParam;
-                        }
-
-                        String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
-                                + "<script>\n"
-                                + "  setTimeout(function() {\n"
-                                + "    location.href = '" + currentURL + "';\n"
-                                + "  }, 3000); // Redirect after 3 seconds\n"
-                                + "</script>";
-
-                        response.setContentType("text/html");
-                        response.setCharacterEncoding("UTF-8");
-                        try {
-                            response.getWriter().write(javascript);
-                            response.flushBuffer();
-                        } catch (IOException ex) {
-                            LogUtil.error(getClassName(), ex, ex.getMessage());
-                        }
-
-                    } else {
-                        String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                        String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h2>" + message + "</h2></marquee>"
-                                + "<script>\n"
-                                + "  setTimeout(function() {\n"
-                                + "    location.reload();\n"
-                                + "  }, 10000); // Reload after 10 seconds\n"
-                                + "</script>";
-
-                        response.setContentType("text/html");
-                        response.setCharacterEncoding("UTF-8");
-                        try {
-                            response.getWriter().write(javascript);
-                            response.flushBuffer();
-                        } catch (IOException ex) {
-                            LogUtil.error(getClassName(), ex, ex.getMessage());
-                        }
-
-                    }
-
-                } else if (fileGenerated && "generated".equalsIgnoreCase(status)) {
-                    File file = new File(path);
-                    response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                    response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
-                    OutputStream outputStream;
-                    try (InputStream inputStream = new FileInputStream(file)) {
-                        outputStream = response.getOutputStream();
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        while ((bytesRead = inputStream.read(buffer)) != -1) {
-                            outputStream.write(buffer, 0, bytesRead);
-                            outputStream.flush();
-                        }
-                    }
-                    outputStream.close();
-
-                } else if (fileGenerated) {
-
-                    //datalist.downloadCSVOrExcel.downloadCompleteMessage
-                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessage", getClassName(), MESSAGE_PATH);
-                    String flagParam = "status=generated"; // Replace with your desired parameter and value
-                    String currentURL = request.getRequestURL().toString();
-
-                    if (request.getQueryString() != null) {
-                        currentURL += "?" + request.getQueryString() + "&" + flagParam;
-                    } else {
-                        currentURL += "?" + flagParam;
-                    }
-
-                    String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
-                            + "<script>\n"
-                            + "  setTimeout(function() {\n"
-                            + "    location.href = '" + currentURL + "';\n"
-                            + "  }, 3000); // Redirect after 3 seconds\n"
-                            + "</script>";
-
-                    response.setContentType("text/html");
-                    response.setCharacterEncoding("UTF-8");
-                    try {
-                        response.getWriter().write(javascript);
-                        response.flushBuffer();
-                    } catch (IOException ex) {
-                        LogUtil.error(getClassName(), ex, ex.getMessage());
-                    }
-
-                } else {
-                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                    String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h2>" + message + "</h2></marquee>"
-                            + "<script>\n"
-                            + "  setTimeout(function() {\n"
-                            + "    location.reload();\n"
-                            + "  }, 10000); // Reload after 10 seconds\n"
-                            + "</script>";
-
-                    response.setContentType("text/html");
-                    response.setCharacterEncoding("UTF-8");
-                    try {
-                        response.getWriter().write(javascript);
-                        response.flushBuffer();
-                    } catch (IOException ex) {
-                        LogUtil.error(getClassName(), ex, ex.getMessage());
-                    }
-
-                }
-            }
-        }
     }
 
     protected static File generateCSVOutputFile(String content, String fileName) throws IOException {
