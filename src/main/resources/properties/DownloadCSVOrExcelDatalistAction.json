@@ -110,6 +110,20 @@
                 "required": "True"
             },
             {
+                "name": "exportImages",
+                "label": "@@datalist.downloadCSVOrExcel.exportImages@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },

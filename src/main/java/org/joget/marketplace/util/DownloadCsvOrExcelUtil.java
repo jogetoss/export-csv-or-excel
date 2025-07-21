@@ -36,14 +36,23 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.poi.ss.usermodel.ClientAnchor;
+import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.Drawing;
+import org.apache.poi.ss.usermodel.Picture;
+import org.apache.tika.Tika;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.app.service.AppService;
 import org.joget.apps.form.model.FormRowSet;
 import org.joget.apps.form.service.FileUtil;
 import org.joget.apps.form.service.FormUtil;
 import org.joget.commons.util.UuidGenerator;
+import org.springframework.context.ApplicationContext;
 
 public class DownloadCsvOrExcelUtil {
 
@@ -54,11 +63,11 @@ public class DownloadCsvOrExcelUtil {
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
     public static void storeCSVToForm(HttpServletRequest request, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String formDefId, String fileFieldId, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator,
-    String includeCustomHeader, String footerHeader, String includeCustomFooter) {
+            String includeCustomHeader, String footerHeader, String includeCustomFooter) {
         try {
             String csvFileName = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
 
-            File csvFile = createCsvFileForStorage(request, dataList, dataListRows, rowKeys, csvFileName, delimiter,  headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+            File csvFile = createCsvFileForStorage(request, dataList, dataListRows, rowKeys, csvFileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
             storeGeneratedFile(csvFile, formDefId, fileFieldId);
             csvFile.delete();
         } catch (IOException e) {
@@ -124,33 +133,31 @@ public class DownloadCsvOrExcelUtil {
         PrintWriter writer = new PrintWriter(stringWriter);
         String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
         if (delimiter.isEmpty()) {
-                delimiter = ",";
+            delimiter = ",";
         }
 
         streamCSV(
-            null, null,
-            writer,
-            dataList,
-            dataListRows,
-            rowKeys,
-            delimiter,
-            headerDecorator,
-            downloadAllWhenNoneSelected,
-            footerDecorator,
-            includeCustomHeader,
-            footerHeader,
-            includeCustomFooter
+                null, null,
+                writer,
+                dataList,
+                dataListRows,
+                rowKeys,
+                delimiter,
+                headerDecorator,
+                downloadAllWhenNoneSelected,
+                footerDecorator,
+                includeCustomHeader,
+                footerHeader,
+                includeCustomFooter
         );
 
         writer.flush();
         String csvContent = stringWriter.toString();
 
-
         File outFile = generateCSVOutputFile(csvContent, filename);
 
         return outFile;
     }
-
 
     public static void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList,
             DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter,
@@ -236,7 +243,7 @@ public class DownloadCsvOrExcelUtil {
         // Construct CSV content
         StringBuilder stringBuilder = new StringBuilder();
         for (String value : keys) {
-            String formattedValue = getBinderFormattedValue(dataList, row, value);
+            String formattedValue = getBinderFormattedValue(dataList, row, value, null);
 
             if (formattedValue != null && formattedValue.contains(delimiter)) {
                 formattedValue = "\"" + formattedValue + "\"";
@@ -250,7 +257,7 @@ public class DownloadCsvOrExcelUtil {
         if (stringBuilder.length() > 0 && stringBuilder.lastIndexOf(delimiter) == stringBuilder.length() - delimiter.length()) {
             stringBuilder.setLength(stringBuilder.length() - delimiter.length());
         }
-        
+
         String value = stringBuilder.toString();
 
         // Write original CSV content to the output stream
@@ -260,7 +267,7 @@ public class DownloadCsvOrExcelUtil {
 
     }
 
-    public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter) {
+    public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages) {
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
@@ -299,6 +306,8 @@ public class DownloadCsvOrExcelUtil {
         rowCounter += 1;
         counter = 0;
 
+        AppDefinition currentAppDef = AppUtil.getCurrentAppDefinition();
+
         if (rowKeys != null && rowKeys.length > 0) {
             for (int x = 0; x < rows.size(); x++) {
                 //compare with all the rowkeys that have been selected
@@ -309,7 +318,7 @@ public class DownloadCsvOrExcelUtil {
                     if (!foundRowKey) {
                         continue;
                     }
-                    printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
+                    printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages);
                     counter += 1;
                     rowCounter += 1;
                 }
@@ -317,7 +326,7 @@ public class DownloadCsvOrExcelUtil {
 
         } else if (downloadAllWhenNoneSelected.equals("true")) {
             for (int x = 0; x < rows.size(); x++) {
-                printExcel(sheet, rowCounter, counter, rows, x, res, dataList);
+                printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages);
                 counter += 1;
                 rowCounter += 1;
             }
@@ -353,9 +362,9 @@ public class DownloadCsvOrExcelUtil {
         return flagFile.exists();
     }
 
-    public static void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String renameFile, String fileName, String includeCustomHeader, String footerHeader, String includeCustomFooter) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
-        String filename =renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
+    public static void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String renameFile, String fileName, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages) throws ServletException, IOException {
+        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
+        String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
         writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
 
@@ -400,11 +409,35 @@ public class DownloadCsvOrExcelUtil {
         }
     }
 
-    protected static String getBinderFormattedValue(DataList dataList, Object o, String name) {
+    protected static String getBinderFormattedValue(DataList dataList, Object o, String name, String exportImages) {
         DataListColumn[] columns = dataList.getColumns();
         int skip = duplicates.getSkipCount(name);
         for (DataListColumn c : columns) {
             if (c.getName().equalsIgnoreCase(name)) {
+
+                if ("true".equals(exportImages)) {
+                    Collection<DataListColumnFormat> formatsList = c.getFormats();
+                    if (formatsList != null && !formatsList.isEmpty()) {
+                        DataListColumnFormat firstFormat = null;
+                        firstFormat = formatsList.iterator().next();
+                        String formatterClassName = firstFormat.getClassName();
+                        String filename = DataListService.evaluateColumnValueFromRow(o, name).toString();
+                        if ("org.joget.apps.datalist.lib.ImageFormatter".equals(formatterClassName)) {
+                            // image upload field
+                            String formDefId = (String) firstFormat.getProperty("formDefId");
+                            String imageSrc = (String) firstFormat.getProperty("imageSrc"); // imageSrc => form
+                            if ("form".equals(imageSrc) && filename != null && !filename.isEmpty()) {
+                                return "IMAGE:" + formDefId + ":" + imageSrc + ":" + filename;
+                            }
+                        } else if ("org.joget.tutorial.FileLinkDatalistFormatter".equals(formatterClassName)) {
+                            // file upload field
+                            String formDefId = (String) firstFormat.getProperty("formDefId");
+                            if (formDefId != null && !formDefId.isEmpty() && filename != null && !filename.isEmpty()) {
+                                return "FILE:" + formDefId + ":" + filename;
+                            }
+                        }
+                    }
+                }
 
                 if (duplicates.checkKey(name)) {
                     if (duplicates.skipCountLessThenDuplicate(name)) {
@@ -467,28 +500,165 @@ public class DownloadCsvOrExcelUtil {
         return sb;
     }
 
-    protected static void printExcel(Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList) {
+    protected static void printExcel(AppDefinition currentAppDef, Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList, String exportImages) {
         Row dataRow = sheet.createRow(rowCounter);
         Object row = getRow(rows, x);
         int z = 0;
         for (String myStr : res) {
-            String value = getBinderFormattedValue(dataList, row, myStr);
-            Cell dataRowCell = dataRow.createCell(z);
-            if (NumberUtils.isParsable(value)) {
-                double numericValue = Double.parseDouble(value);
-                if (isWholeNumber(numericValue)) {
-                    // If the numeric value is a whole number, format it to display without decimal points
-                    DecimalFormat decimalFormat = new DecimalFormat("#");
-                    value = decimalFormat.format(numericValue);
-                } else {
-                    // If the numeric value has decimal points, set it directly
-                    value = Double.toString(numericValue);
-                }
-                dataRowCell.setCellValue(value);
+            String value = getBinderFormattedValue(dataList, row, myStr, exportImages);
+
+            // Check if value contains multiple images (if they're separated by some delimiter)
+            if (value.startsWith("IMAGE:") || value.startsWith("FILE:")) {
+                // Process image/file - this might consume multiple columns if there are multiple images
+                z = processImageOrFile(currentAppDef, sheet, dataRow, rowCounter, rows, x, value, z);
             } else {
-                dataRowCell.setCellValue(value);
+                // Process regular data
+                Cell dataRowCell = dataRow.createCell(z);
+                if (NumberUtils.isParsable(value)) {
+                    double numericValue = Double.parseDouble(value);
+                    if (isWholeNumber(numericValue)) {
+                        // If the numeric value is a whole number, format it to display without decimal points
+                        DecimalFormat decimalFormat = new DecimalFormat("#");
+                        value = decimalFormat.format(numericValue);
+                    } else {
+                        // If the numeric value has decimal points, set it directly
+                        value = Double.toString(numericValue);
+                    }
+                    dataRowCell.setCellValue(value);
+                } else {
+                    dataRowCell.setCellValue(value);
+                }
+                z += 1;
             }
-            z += 1;
+        }
+    }
+
+    private static int processImageOrFile(AppDefinition currentAppDef, Sheet sheet, Row dataRow, int rowCounter, DataListCollection rows, int x, String value, int startColumn) {
+        int currentColumn = startColumn;
+
+        // If your value can contain multiple images separated by some delimiter, split them here
+        // For now, assuming single image per field
+        String[] imageValues = {value}; // Modify this if you have multiple images in one field
+
+        for (String imageValue : imageValues) {
+            Cell dataRowCell = dataRow.createCell(currentColumn);
+
+            if (imageValue.startsWith("IMAGE:")) {
+                try {
+                    // image found
+                    String rowId = findRowKey(rows, x);
+
+                    ApplicationContext ac = AppUtil.getApplicationContext();
+                    AppService appService = (AppService) ac.getBean("appService");
+                    String[] pieces = imageValue.split(":");
+                    String formDefId = pieces[1];
+                    String imageSrc = pieces[2];
+                    String fileName = pieces[3];
+
+                    String tableName = appService.getFormTableName(currentAppDef, formDefId);
+                    File imageFile = FileUtil.getFile(fileName, tableName, rowId);
+                    if (imageFile != null && imageFile.exists()) {
+                        byte[] imageBytes = Files.readAllBytes(imageFile.toPath());
+                        Workbook workbook = sheet.getWorkbook();
+                        int pictureType = getPictureType(fileName);
+                        int pictureIdx = workbook.addPicture(imageBytes, pictureType);
+                        CreationHelper helper = workbook.getCreationHelper();
+                        Drawing<?> drawing = sheet.createDrawingPatriarch();
+                        ClientAnchor anchor = helper.createClientAnchor();
+
+                        // Create thumbnail-sized cell
+                        int thumbnailWidth = 1500;  // Column width units
+                        float thumbnailHeight = 40; // Row height in points
+
+                        sheet.setColumnWidth(currentColumn, thumbnailWidth);
+                        dataRow.setHeightInPoints(thumbnailHeight);
+
+                        anchor.setCol1(currentColumn);
+                        anchor.setRow1(rowCounter);
+                        anchor.setCol2(currentColumn + 1);
+                        anchor.setRow2(rowCounter + 1);
+
+                        Picture pict = drawing.createPicture(anchor, pictureIdx);
+
+                        // Scale to fit nicely in thumbnail cell
+                        pict.resize(1.0, 1.0); // Adjust between 0.4 to 1.0 based on your preference
+                    }
+                } catch (IOException ex) {
+                    LogUtil.error(getClassName(), ex, ex.getMessage());
+                }
+            } else if (imageValue.startsWith("FILE:")) {
+                ApplicationContext ac = AppUtil.getApplicationContext();
+                AppService appService = (AppService) ac.getBean("appService");
+                String[] pieces = imageValue.split(":");
+                String formDefId = pieces[1];
+                String fileName = pieces[2];
+                String rowId = findRowKey(rows, x);
+
+                String tableName = appService.getFormTableName(currentAppDef, formDefId);
+                try {
+                    File file = FileUtil.getFile(fileName, tableName, rowId);
+                    if (file != null && file.exists()) {
+                        Tika tika = new Tika();
+                        String mimeType = tika.detect(file);
+                        if (mimeType != null && mimeType.startsWith("image/")) {
+                            byte[] imageBytes = Files.readAllBytes(file.toPath());
+                            Workbook workbook = sheet.getWorkbook();
+                            int pictureType = getPictureType(fileName);
+                            int pictureIdx = workbook.addPicture(imageBytes, pictureType);
+                            CreationHelper helper = workbook.getCreationHelper();
+                            Drawing<?> drawing = sheet.createDrawingPatriarch();
+                            ClientAnchor anchor = helper.createClientAnchor();
+
+                            // Create thumbnail-sized cell
+                            int thumbnailWidth = 1500;  // Column width units
+                            float thumbnailHeight = 40; // Row height in points
+
+                            sheet.setColumnWidth(currentColumn, thumbnailWidth);
+                            dataRow.setHeightInPoints(thumbnailHeight);
+
+                            anchor.setCol1(currentColumn);
+                            anchor.setRow1(rowCounter);
+                            anchor.setCol2(currentColumn + 1);
+                            anchor.setRow2(rowCounter + 1);
+
+                            Picture pict = drawing.createPicture(anchor, pictureIdx);
+
+                            // Scale to fit nicely in thumbnail cell
+                            pict.resize(1.0, 1.0); // Adjust between 0.4 to 1.0 based on your preference
+                        }
+                    }
+                } catch (IOException ex) {
+                    LogUtil.error(getClassName(), ex, ex.getMessage());
+                }
+            }
+
+            currentColumn += 1; // Move to next column for next image
+        }
+
+        return currentColumn; // Return the next available column index
+    }
+
+    protected static String findRowKey(DataListCollection rows, int x) {
+        Object row = rows.get(x);
+        Object idValue = null;
+
+        if (row instanceof HashMap) {
+            idValue = ((HashMap) row).get("id");
+        } else if (row instanceof FormRow) {
+            idValue = ((FormRow) row).get("id");
+        }
+
+        return (idValue != null) ? idValue.toString() : null;
+    }
+
+    private static int getPictureType(String fileName) {
+        String extension = fileName.toLowerCase();
+        if (extension.endsWith(".png")) {
+            return Workbook.PICTURE_TYPE_PNG;
+        } else if (extension.endsWith(".jpg") || extension.endsWith(".jpeg")) {
+            return Workbook.PICTURE_TYPE_JPEG;
+        } else {
+            return Workbook.PICTURE_TYPE_PNG; // Default fallback
         }
     }
 

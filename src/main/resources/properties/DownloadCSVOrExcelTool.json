@@ -51,6 +51,20 @@
                 "required": "True"
             },
             {
+                "name": "exportImages",
+                "label": "@@tool.downloadCSVOrExcel.exportImages@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
                 "label": "@@tool.downloadCSVOrExcel.advancedSetting@@",
                 "type": "header"
             },
