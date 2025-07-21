@@ -131,7 +131,6 @@ public class DownloadCsvOrExcelUtil {
     public static File generateCSVFile(DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter) throws Exception {
         StringWriter stringWriter = new StringWriter();
         PrintWriter writer = new PrintWriter(stringWriter);
-        String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
         if (delimiter.isEmpty()) {
             delimiter = ",";
         }
@@ -154,7 +153,8 @@ public class DownloadCsvOrExcelUtil {
         writer.flush();
         String csvContent = stringWriter.toString();
 
-        File outFile = generateCSVOutputFile(csvContent, filename);
+
+        File outFile = generateCSVOutputFile(csvContent, fileName);
 
         return outFile;
     }
@@ -699,7 +699,7 @@ public class DownloadCsvOrExcelUtil {
     }
 
     protected static File generateCSVOutputFile(String content, String fileName) throws IOException {
-        File outFile = new File(fileName);
+        File outFile = getUniqueFile(fileName);
 
         try (PrintWriter writer = new PrintWriter(new FileWriter(outFile))) {
             writer.write(content);
@@ -709,7 +709,7 @@ public class DownloadCsvOrExcelUtil {
     }
 
     public static File generateExcelOutputFile(Workbook workbook, String fileName) throws IOException {
-        File outFile = new File(fileName);
+        File outFile = getUniqueFile(fileName);
 
         try (FileOutputStream out = new FileOutputStream(outFile)) {
             workbook.write(out);
@@ -718,5 +718,38 @@ public class DownloadCsvOrExcelUtil {
         workbook.close();
 
         return outFile;
+    }
+
+    protected static File getUniqueFile(String fileName) {
+        File file = new File(fileName);
+
+        if (!file.exists()) {
+            return file;
+        }
+
+        String name = file.getName();
+        String parent = file.getParent();
+        if (parent == null) parent = ".";
+
+        String baseName;
+        String extension = "";
+
+        int dotIndex = name.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < name.length() - 1) {
+            baseName = name.substring(0, dotIndex);
+            extension = name.substring(dotIndex); // includes the dot
+        } else {
+            baseName = name;
+        }
+
+        int counter = 1;
+        File newFile;
+        do {
+            String newName = baseName + " (" + counter + ")" + extension;
+            newFile = new File(parent, newName);
+            counter++;
+        } while (newFile.exists());
+
+        return newFile;
     }
 }

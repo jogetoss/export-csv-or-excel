@@ -2,10 +2,12 @@ package org.joget.marketplace;
 
 import org.apache.poi.ss.usermodel.Workbook;
 import org.joget.apps.app.service.AppPluginUtil;
+import org.joget.apps.app.service.AppService;
 import org.joget.apps.app.service.AppUtil;
 import org.joget.apps.datalist.model.DataList;
 import org.joget.apps.datalist.model.DataListCollection;
 import org.joget.apps.datalist.service.DataListService;
+import org.joget.apps.form.service.FileUtil;
 import org.joget.commons.util.LogUtil;
 import org.joget.workflow.util.WorkflowUtil;
 import org.springframework.beans.BeansException;
@@ -79,8 +81,12 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
         String formDefId = getPropertyString("formDefId");
         String fileFieldId = getPropertyString("fileFieldId");
         String pathOptions = getPropertyString("pathOptions");
-        String filePath = getPropertyString("filePath");;
         String exportImages = getPropertyString("exportImages");;
+        String filePath = getPropertyString("filePath");
+
+        ApplicationContext ac = AppUtil.getApplicationContext();
+        AppService appService = (AppService) ac.getBean("appService");
+        AppDefinition appDef = AppUtil.getCurrentAppDefinition();
 
         HttpServletRequest request = WorkflowUtil.getHttpServletRequest();
         if (request != null && !"POST".equalsIgnoreCase(request.getMethod())) {
@@ -107,41 +113,19 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
             File outputFile = null;
             try {
                 if(getDownloadAs()){
-                    outputFile = DownloadCsvOrExcelUtil.generateCSVFile(dataList, rows, rowKeys, renameFile, fileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+                    String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
+                    outputFile = DownloadCsvOrExcelUtil.generateCSVFile(dataList, rows, rowKeys, renameFile, filePath + "/" + filename, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
                 } else {
                     Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
                     String filename =renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
-                    outputFile = DownloadCsvOrExcelUtil.generateExcelOutputFile(workbook, filename);
+                    outputFile = DownloadCsvOrExcelUtil.generateExcelOutputFile(workbook, filePath + "/" + filename);
                 }
+                if (outputFile.exists()) {
+                    LogUtil.info(getClassName(), "File saved to: " + filePath);
+                } 
             } catch (Exception e){
                  LogUtil.error(getClassName(), e, e.getMessage());   
             }
-
-            if (outputFile.exists()) {
-                File folder = new File(filePath);
-                if (!folder.exists()) {
-                    folder.mkdirs();
-                }
-
-                String baseName = getBaseName(outputFile.getName());
-                String extension = getExtension(outputFile.getName());
-
-                File destination = new File(folder, outputFile.getName());
-                int counter = 1;
-
-                while (destination.exists()) {
-                    String newName = baseName + "(" + counter + ")" + extension;
-                    destination = new File(folder, newName);
-                    counter++;
-                }
-
-                try {
-                    Files.copy(outputFile.toPath(), destination.toPath());
-                    LogUtil.info(getClassName(), "File saved to: " + destination.getAbsolutePath());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            } 
         } else if ("FORM_FIELD".equalsIgnoreCase(pathOptions)) {
             if(getDownloadAs()){
                 DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, rows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter);
@@ -154,16 +138,6 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
         
         
         return null;
-    }
-
-    private static String getBaseName(String filename) {
-        int dotIndex = filename.lastIndexOf('.');
-        return (dotIndex == -1) ? filename : filename.substring(0, dotIndex);
-    }
-
-    private static String getExtension(String filename) {
-        int dotIndex = filename.lastIndexOf('.');
-        return (dotIndex == -1) ? "" : filename.substring(dotIndex);
     }
 
     protected static DataList getDataList(String datalistId) throws BeansException {
