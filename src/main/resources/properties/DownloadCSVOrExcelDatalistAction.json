@@ -121,7 +121,9 @@
                         "value": "true",
                         "label": "@@datalist.downloadCSVOrExcel.yes@@"
                     }],
-                "required": "True"
+                "required": "True",
+                "control_field": "downloadAs",
+                "control_value": "excel"
             },
             {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
