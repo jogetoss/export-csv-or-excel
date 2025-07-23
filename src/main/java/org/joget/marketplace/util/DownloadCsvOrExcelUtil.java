@@ -420,20 +420,22 @@ public class DownloadCsvOrExcelUtil {
                     if (formatsList != null && !formatsList.isEmpty()) {
                         DataListColumnFormat firstFormat = null;
                         firstFormat = formatsList.iterator().next();
-                        String formatterClassName = firstFormat.getClassName();
-                        String filename = DataListService.evaluateColumnValueFromRow(o, name).toString();
-                        if ("org.joget.apps.datalist.lib.ImageFormatter".equals(formatterClassName)) {
-                            // image upload field
-                            String formDefId = (String) firstFormat.getProperty("formDefId");
-                            String imageSrc = (String) firstFormat.getProperty("imageSrc"); // imageSrc => form
-                            if ("form".equals(imageSrc) && filename != null && !filename.isEmpty()) {
-                                return "IMAGE:" + formDefId + ":" + imageSrc + ":" + filename;
-                            }
-                        } else if ("org.joget.tutorial.FileLinkDatalistFormatter".equals(formatterClassName)) {
-                            // file upload field
-                            String formDefId = (String) firstFormat.getProperty("formDefId");
-                            if (formDefId != null && !formDefId.isEmpty() && filename != null && !filename.isEmpty()) {
-                                return "FILE:" + formDefId + ":" + filename;
+                        if (firstFormat != null) {
+                            String formatterClassName = firstFormat.getClassName();
+                            String filename = DataListService.evaluateColumnValueFromRow(o, name).toString();
+                            if ("org.joget.apps.datalist.lib.ImageFormatter".equals(formatterClassName)) {
+                                // image upload field
+                                String formDefId = (String) firstFormat.getProperty("formDefId");
+                                String imageSrc = (String) firstFormat.getProperty("imageSrc"); // imageSrc => form
+                                if ("form".equals(imageSrc) && filename != null && !filename.isEmpty()) {
+                                    return "IMAGE:" + formDefId + ":" + imageSrc + ":" + filename;
+                                }
+                            } else if ("org.joget.tutorial.FileLinkDatalistFormatter".equals(formatterClassName)) {
+                                // file upload field
+                                String formDefId = (String) firstFormat.getProperty("formDefId");
+                                if (formDefId != null && !formDefId.isEmpty() && filename != null && !filename.isEmpty()) {
+                                    return "FILE:" + formDefId + ":" + filename;
+                                }
                             }
                         }
                     }
