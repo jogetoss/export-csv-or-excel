@@ -123,7 +123,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         String formDefId = getPropertyString("formDefId");
         String fileFieldId = getPropertyString("fileFieldId");
         String exportImages = getPropertyString("exportImages");
-
+        String exportEncrypt = getPropertyString("exportEncrypt");
+        
         // only allow POST
         DataListActionResult result = new DataListActionResult();
         result.setType(DataListActionResult.TYPE_REDIRECT);
@@ -143,12 +144,12 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                     // Check if storeToForm is enabled; skip download if true
                     if (!storeToForm) {
-                        DownloadCsvOrExcelUtil.downloadCSV(request, response, dataList, dataListRows, rowKeys, renameFile, fileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+                        DownloadCsvOrExcelUtil.downloadCSV(request, response, dataList, dataListRows, rowKeys, renameFile, fileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
                     }
 
                     // Store CSV to form if enabled (separate from download)
                     if (storeToForm) {
-                        DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, dataListRows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter);
+                        DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, dataListRows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter, exportEncrypt);
                     }
                 } else {
                     String downloadBackgroud = getPropertyString("downloadBackgroud");
@@ -168,7 +169,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                                 dataList.setUseSession(false);
                                 DataListCollection rows = getDataListRows(dataList, rowKeys, true);
                                 //DataListCollection rows = dataList.getRows(50000000, null);
-                                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
+                                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
                                 String filePath = excelFolder.getPath() + File.separator + excelFileName;
 
                                 try {
@@ -202,15 +203,15 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                     } else {
                         // not in the backgroud, get the rows
                         DataListCollection rows = getDataListRows(dataList, rowKeys, false);
-                        Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
 
                         if (storeToForm) {
+                            Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
                             DownloadCsvOrExcelUtil.storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx", renameFile, formDefId, fileFieldId);
 
                         }
 
                         if (!storeToForm) {
-                            DownloadCsvOrExcelUtil.downloadExcel(request, response, dataList, rows, rowKeys, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, renameFile,  fileName, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
+                            DownloadCsvOrExcelUtil.downloadExcel(request, response, dataList, rows, rowKeys, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, renameFile,  fileName, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
                         }
                     }
                 }

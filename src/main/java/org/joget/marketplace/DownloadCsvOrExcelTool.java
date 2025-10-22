@@ -83,6 +83,7 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
         String pathOptions = getPropertyString("pathOptions");
         String exportImages = getPropertyString("exportImages");;
         String filePath = getPropertyString("filePath");
+        String exportEncrypt = getPropertyString("exportEncrypt");
 
         ApplicationContext ac = AppUtil.getApplicationContext();
         AppService appService = (AppService) ac.getBean("appService");
@@ -114,9 +115,9 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
             try {
                 if(getDownloadAs()){
                     String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
-                    outputFile = DownloadCsvOrExcelUtil.generateCSVFile(dataList, rows, rowKeys, renameFile, filePath + "/" + filename, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+                    outputFile = DownloadCsvOrExcelUtil.generateCSVFile(dataList, rows, rowKeys, renameFile, filePath + "/" + filename, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
                 } else {
-                    Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
+                    Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
                     String filename =renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
                     outputFile = DownloadCsvOrExcelUtil.generateExcelOutputFile(workbook, filePath + "/" + filename);
                 }
@@ -128,9 +129,9 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
             }
         } else if ("FORM_FIELD".equalsIgnoreCase(pathOptions)) {
             if(getDownloadAs()){
-                DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, rows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter);
+                DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, rows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter, exportEncrypt);
             } else {
-                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
+                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
                 DownloadCsvOrExcelUtil.storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx", renameFile, formDefId, fileFieldId);
             }
             LogUtil.info(getClassName(), "File saved to form");

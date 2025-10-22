@@ -14,6 +14,8 @@ import org.joget.apps.datalist.service.DataListService;
 import org.joget.apps.form.model.FormRow;
 import org.joget.commons.util.FileManager;
 import org.joget.commons.util.LogUtil;
+import org.joget.commons.util.SecurityUtil;
+
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -37,8 +39,6 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.poi.ss.usermodel.ClientAnchor;
@@ -63,11 +63,11 @@ public class DownloadCsvOrExcelUtil {
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
     public static void storeCSVToForm(HttpServletRequest request, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String formDefId, String fileFieldId, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator,
-            String includeCustomHeader, String footerHeader, String includeCustomFooter) {
+            String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) {
         try {
             String csvFileName = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
 
-            File csvFile = createCsvFileForStorage(request, dataList, dataListRows, rowKeys, csvFileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+            File csvFile = createCsvFileForStorage(request, dataList, dataListRows, rowKeys, csvFileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
             storeGeneratedFile(csvFile, formDefId, fileFieldId);
             csvFile.delete();
         } catch (IOException e) {
@@ -90,10 +90,10 @@ public class DownloadCsvOrExcelUtil {
     protected static File createCsvFileForStorage(HttpServletRequest request, DataList dataList,
             DataListCollection dataListRows, String[] rowKeys, String filename, String delimiter,
             String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator,
-            String includeCustomHeader, String footerHeader, String includeCustomFooter) throws IOException {
+            String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) throws IOException {
         File csvFile = new File(FileManager.getBaseDirectory(), filename);
         try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(csvFile)))) {
-            streamCSV(request, null, writer, dataList, dataListRows, rowKeys, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+            streamCSV(request, null, writer, dataList, dataListRows, rowKeys, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
         }
         return csvFile;
     }
@@ -128,7 +128,7 @@ public class DownloadCsvOrExcelUtil {
         }
     }
 
-    public static File generateCSVFile(DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter) throws Exception {
+    public static File generateCSVFile(DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) throws Exception {
         StringWriter stringWriter = new StringWriter();
         PrintWriter writer = new PrintWriter(stringWriter);
         if (delimiter.isEmpty()) {
@@ -147,7 +147,8 @@ public class DownloadCsvOrExcelUtil {
                 footerDecorator,
                 includeCustomHeader,
                 footerHeader,
-                includeCustomFooter
+                includeCustomFooter,
+                exportEncrypt
         );
 
         writer.flush();
@@ -162,7 +163,7 @@ public class DownloadCsvOrExcelUtil {
     public static void downloadCSV(HttpServletRequest request, HttpServletResponse response, DataList dataList,
             DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter,
             String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator,
-            String includeCustomHeader, String footerHeader, String includeCustomFooter)
+            String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt)
             throws ServletException, IOException {
         String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
         if (delimiter.isEmpty()) {
@@ -173,14 +174,14 @@ public class DownloadCsvOrExcelUtil {
 
         try (OutputStream outputStream = response.getOutputStream()) {
             PrintWriter writer = new PrintWriter(outputStream);
-            streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter);
+            streamCSV(request, response, writer, dataList, dataListRows, rowKeys, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
             writer.flush(); // Flush any remaining buffered data
             outputStream.flush(); // Flush the output stream
             writer.close();
         }
     }
 
-    protected static void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter) throws IOException {
+    protected static void streamCSV(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) throws IOException {
         HashMap<String, StringBuilder> labelAndKeys = getLabelAndKey(dataList);
         StringBuilder keySB = labelAndKeys.get("key");
         StringBuilder headerSB = labelAndKeys.get("header");
@@ -218,7 +219,7 @@ public class DownloadCsvOrExcelUtil {
                     Object row = getRow(dataListRows, x);
 
                     //get the keys and save it
-                    writeCSVContents(dataList, null, keys, row, writer, delimiter);
+                    writeCSVContents(dataList, null, keys, row, writer, delimiter, exportEncrypt);
                 }
             }
 
@@ -226,7 +227,7 @@ public class DownloadCsvOrExcelUtil {
             for (int x = 0; x < dataListRows.size(); x++) {
                 Object row = getRow(dataListRows, x);
                 //get the keys and save it
-                writeCSVContents(dataList, null, keys, row, writer, delimiter);
+                writeCSVContents(dataList, null, keys, row, writer, delimiter, exportEncrypt);
             }
         }
         if (getFooter(footerHeader)) {
@@ -239,11 +240,11 @@ public class DownloadCsvOrExcelUtil {
         }
     }
 
-    protected static void writeCSVContents(DataList dataList, ByteArrayOutputStream outputStream, String[] keys, Object row, PrintWriter writer, String delimiter) throws IOException {
+    protected static void writeCSVContents(DataList dataList, ByteArrayOutputStream outputStream, String[] keys, Object row, PrintWriter writer, String delimiter, String exportEncrypt) throws IOException {
         // Construct CSV content
         StringBuilder stringBuilder = new StringBuilder();
         for (String value : keys) {
-            String formattedValue = getBinderFormattedValue(dataList, row, value, null);
+            String formattedValue = getBinderFormattedValue(dataList, row, value, null, exportEncrypt);
 
             if (formattedValue != null && formattedValue.contains(delimiter)) {
                 formattedValue = "\"" + formattedValue + "\"";
@@ -267,7 +268,7 @@ public class DownloadCsvOrExcelUtil {
 
     }
 
-    public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages) {
+    public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt) {
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
@@ -318,7 +319,7 @@ public class DownloadCsvOrExcelUtil {
                     if (!foundRowKey) {
                         continue;
                     }
-                    printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages);
+                    printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt);
                     counter += 1;
                     rowCounter += 1;
                 }
@@ -326,7 +327,7 @@ public class DownloadCsvOrExcelUtil {
 
         } else if (downloadAllWhenNoneSelected.equals("true")) {
             for (int x = 0; x < rows.size(); x++) {
-                printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages);
+                printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt);
                 counter += 1;
                 rowCounter += 1;
             }
@@ -362,8 +363,8 @@ public class DownloadCsvOrExcelUtil {
         return flagFile.exists();
     }
 
-    public static void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String renameFile, String fileName, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages);
+    public static void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String renameFile, String fileName, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt) throws ServletException, IOException {
+        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
         String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
         writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
@@ -409,7 +410,7 @@ public class DownloadCsvOrExcelUtil {
         }
     }
 
-    protected static String getBinderFormattedValue(DataList dataList, Object o, String name, String exportImages) {
+    protected static String getBinderFormattedValue(DataList dataList, Object o, String name, String exportImages, String exportEncrypt) {
         DataListColumn[] columns = dataList.getColumns();
         int skip = duplicates.getSkipCount(name);
         for (DataListColumn c : columns) {
@@ -454,6 +455,11 @@ public class DownloadCsvOrExcelUtil {
                 String value;
                 try {
                     value = DataListService.evaluateColumnValueFromRow(o, name).toString();
+
+                    if (!"true".equals(exportEncrypt)) {
+                        value = SecurityUtil.decrypt(value);
+                    }
+
                     Collection<DataListColumnFormat> formats = c.getFormats();
                     if (formats != null) {
                         for (DataListColumnFormat f : formats) {
@@ -502,12 +508,12 @@ public class DownloadCsvOrExcelUtil {
         return sb;
     }
 
-    protected static void printExcel(AppDefinition currentAppDef, Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList, String exportImages) {
+    protected static void printExcel(AppDefinition currentAppDef, Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList, String exportImages, String exportEncrypt) {
         Row dataRow = sheet.createRow(rowCounter);
         Object row = getRow(rows, x);
         int z = 0;
         for (String myStr : res) {
-            String value = getBinderFormattedValue(dataList, row, myStr, exportImages);
+            String value = getBinderFormattedValue(dataList, row, myStr, exportImages, exportEncrypt);
 
             // Check if value contains multiple images (if they're separated by some delimiter)
             if (value.startsWith("IMAGE:") || value.startsWith("FILE:")) {
@@ -526,6 +532,7 @@ public class DownloadCsvOrExcelUtil {
                         // If the numeric value has decimal points, set it directly
                         value = Double.toString(numericValue);
                     }
+
                     dataRowCell.setCellValue(value);
                 } else {
                     dataRowCell.setCellValue(value);

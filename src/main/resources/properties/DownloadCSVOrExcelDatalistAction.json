@@ -126,6 +126,20 @@
                 "control_value": "excel"
             },
             {
+                "name": "exportEncrypt",
+                "label": "@@datalist.downloadCSVOrExcel.exportEncrypt@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True"
+            },
+            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },
