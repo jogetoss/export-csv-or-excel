@@ -84,6 +84,8 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
         String exportImages = getPropertyString("exportImages");;
         String filePath = getPropertyString("filePath");
         String exportEncrypt = getPropertyString("exportEncrypt");
+        String exportNumeric = getPropertyString("exportNumeric");
+        Object[] selectedNumericColumn = (Object[]) properties.get("selectedNumericColumn");
 
         ApplicationContext ac = AppUtil.getApplicationContext();
         AppService appService = (AppService) ac.getBean("appService");
@@ -117,7 +119,7 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
                     String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
                     outputFile = DownloadCsvOrExcelUtil.generateCSVFile(dataList, rows, rowKeys, renameFile, filePath + "/" + filename, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
                 } else {
-                    Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
+                    Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
                     String filename =renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
                     outputFile = DownloadCsvOrExcelUtil.generateExcelOutputFile(workbook, filePath + "/" + filename);
                 }
@@ -131,7 +133,7 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
             if(getDownloadAs()){
                 DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, rows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter, exportEncrypt);
             } else {
-                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
+                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
                 DownloadCsvOrExcelUtil.storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx", renameFile, formDefId, fileFieldId);
             }
             LogUtil.info(getClassName(), "File saved to form");

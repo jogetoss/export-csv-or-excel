@@ -140,6 +140,46 @@
                 "required": "True"
             },
             {
+                "name": "exportNumeric",
+                "label": "@@datalist.downloadCSVOrExcel.exportNumeric@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "required": "True",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+             {
+                "name": "formDefIdGrid",
+                "label": "@@datalist.downloadCSVOrExcel.formDefId@@",
+                "type": "selectbox",
+                "required": "True",
+                "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/forms/options",
+                "control_field": "exportNumeric",
+                "control_value": "true"
+            },
+            {
+                "name": "selectedNumericColumn",
+                "label": "@@datalist.downloadCSVOrExcel.selectColumn@@",
+                "type": "grid",
+                "columns": [
+                    {
+                        "key": "field",
+                        "label": "@@datalist.downloadCSVOrExcel.fieldName@@",
+                        "options_ajax_on_change": "formDefId:formDefIdGrid",
+                        "options_ajax": "[CONTEXT_PATH]/web/json/console/app[APP_PATH]/form/columns/options"
+                    }
+                ],
+                "control_field": "exportNumeric",
+                "control_value": "true"
+            },
+            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },

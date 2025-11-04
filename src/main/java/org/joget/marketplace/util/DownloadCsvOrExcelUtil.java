@@ -34,6 +34,8 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
@@ -43,6 +45,7 @@ import java.nio.file.Files;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.poi.ss.usermodel.ClientAnchor;
 import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.Drawing;
 import org.apache.poi.ss.usermodel.Picture;
 import org.apache.tika.Tika;
@@ -52,6 +55,7 @@ import org.joget.apps.form.model.FormRowSet;
 import org.joget.apps.form.service.FileUtil;
 import org.joget.apps.form.service.FormUtil;
 import org.joget.commons.util.UuidGenerator;
+import org.joget.workflow.util.WorkflowUtil;
 import org.springframework.context.ApplicationContext;
 
 public class DownloadCsvOrExcelUtil {
@@ -268,7 +272,7 @@ public class DownloadCsvOrExcelUtil {
 
     }
 
-    public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt) {
+    public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) {
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");
         StringBuilder headerSB = sb.get("header");
@@ -319,7 +323,7 @@ public class DownloadCsvOrExcelUtil {
                     if (!foundRowKey) {
                         continue;
                     }
-                    printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt);
+                    printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt, exportNumeric, gridColumns);
                     counter += 1;
                     rowCounter += 1;
                 }
@@ -327,7 +331,7 @@ public class DownloadCsvOrExcelUtil {
 
         } else if (downloadAllWhenNoneSelected.equals("true")) {
             for (int x = 0; x < rows.size(); x++) {
-                printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt);
+                printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt, exportNumeric, gridColumns);
                 counter += 1;
                 rowCounter += 1;
             }
@@ -354,6 +358,7 @@ public class DownloadCsvOrExcelUtil {
             }
         }
 
+        sheet.setForceFormulaRecalculation(true);
         return workbook;
 
     }
@@ -363,8 +368,8 @@ public class DownloadCsvOrExcelUtil {
         return flagFile.exists();
     }
 
-    public static void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String renameFile, String fileName, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt) throws ServletException, IOException {
-        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt);
+    public static void downloadExcel(HttpServletRequest request, HttpServletResponse response, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String renameFile, String fileName, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) throws ServletException, IOException {
+        Workbook workbook = getExcel(dataList, dataListRows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns);
         String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
         writeResponseExcel(request, response, workbook, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\n");
     }
@@ -508,10 +513,27 @@ public class DownloadCsvOrExcelUtil {
         return sb;
     }
 
-    protected static void printExcel(AppDefinition currentAppDef, Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList, String exportImages, String exportEncrypt) {
+    protected static void printExcel(AppDefinition currentAppDef, Sheet sheet, int rowCounter, int counter, DataListCollection rows, int x, String[] res, DataList dataList, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) {
         Row dataRow = sheet.createRow(rowCounter);
         Object row = getRow(rows, x);
         int z = 0;
+
+        // number format for excel
+        Workbook workbook = sheet.getWorkbook();
+        DataFormat format = workbook.createDataFormat();
+        CellStyle numberStyle = workbook.createCellStyle();
+        numberStyle.setDataFormat(format.getFormat("#,##0.00"));
+
+        // get numeric column from config
+        Set<String> numericColumns = new HashSet<>();
+        if (gridColumns != null && gridColumns.length > 0) {
+            for (Object o : gridColumns) {
+                Map mapping = (HashMap) o;
+                String columnField = mapping.get("field").toString();
+                numericColumns.add(columnField);
+            }
+        }
+
         for (String myStr : res) {
             String value = getBinderFormattedValue(dataList, row, myStr, exportImages, exportEncrypt);
 
@@ -520,24 +542,18 @@ public class DownloadCsvOrExcelUtil {
                 // Process image/file - this might consume multiple columns if there are multiple images
                 z = processImageOrFile(currentAppDef, sheet, dataRow, rowCounter, rows, x, value, z);
             } else {
-                // Process regular data
-                Cell dataRowCell = dataRow.createCell(z);
-                if (NumberUtils.isParsable(value)) {
-                    double numericValue = Double.parseDouble(value);
-                    if (isWholeNumber(numericValue)) {
-                        // If the numeric value is a whole number, format it to display without decimal points
-                        DecimalFormat decimalFormat = new DecimalFormat("#");
-                        value = decimalFormat.format(numericValue);
-                    } else {
-                        // If the numeric value has decimal points, set it directly
-                        value = Double.toString(numericValue);
-                    }
+                  Cell dataRowCell = dataRow.createCell(z);
 
-                    dataRowCell.setCellValue(value);
+                // ✅ Check if this column is numeric
+                if (numericColumns.contains(myStr) && NumberUtils.isParsable(value)) {
+                    double numericValue = Double.parseDouble(value);
+                    dataRowCell.setCellStyle(numberStyle);
+                    dataRowCell.setCellValue(numericValue);
                 } else {
                     dataRowCell.setCellValue(value);
                 }
-                z += 1;
+
+                z++;
             }
         }
     }
