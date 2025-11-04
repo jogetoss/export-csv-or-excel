@@ -548,7 +548,7 @@ public class DownloadCsvOrExcelUtil {
                   Cell dataRowCell = dataRow.createCell(z);
 
                 // check if this column is numeric
-                if (!"true".equals(exportNumeric) && numericColumns.contains(myStr) && NumberUtils.isParsable(value)) {
+                if ("true".equals(exportNumeric) && numericColumns.contains(myStr) && NumberUtils.isParsable(value)) {
                     double numericValue = Double.parseDouble(value);
                     dataRowCell.setCellStyle(numberStyle);
                     dataRowCell.setCellValue(numericValue);

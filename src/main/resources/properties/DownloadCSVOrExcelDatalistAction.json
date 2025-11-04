@@ -155,7 +155,7 @@
                 "control_field": "downloadAs",
                 "control_value": "excel"
             },
-             {
+            {
                 "name": "formDefIdGrid",
                 "label": "@@datalist.downloadCSVOrExcel.formDefId@@",
                 "type": "selectbox",
