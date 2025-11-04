@@ -526,11 +526,14 @@ public class DownloadCsvOrExcelUtil {
 
         // get numeric column from config
         Set<String> numericColumns = new HashSet<>();
-        if (gridColumns != null && gridColumns.length > 0) {
-            for (Object o : gridColumns) {
-                Map mapping = (HashMap) o;
-                String columnField = mapping.get("field").toString();
-                numericColumns.add(columnField);
+        
+        if ("true".equals(exportNumeric)) {
+            if (gridColumns != null && gridColumns.length > 0) {
+                for (Object o : gridColumns) {
+                    Map mapping = (HashMap) o;
+                    String columnField = mapping.get("field").toString();
+                    numericColumns.add(columnField);
+                }
             }
         }
 
@@ -544,8 +547,8 @@ public class DownloadCsvOrExcelUtil {
             } else {
                   Cell dataRowCell = dataRow.createCell(z);
 
-                // ✅ Check if this column is numeric
-                if (numericColumns.contains(myStr) && NumberUtils.isParsable(value)) {
+                // check if this column is numeric
+                if (!"true".equals(exportNumeric) && numericColumns.contains(myStr) && NumberUtils.isParsable(value)) {
                     double numericValue = Double.parseDouble(value);
                     dataRowCell.setCellStyle(numberStyle);
                     dataRowCell.setCellValue(numericValue);
