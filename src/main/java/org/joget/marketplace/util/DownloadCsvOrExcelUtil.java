@@ -66,6 +66,23 @@ public class DownloadCsvOrExcelUtil {
 
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
+    private static final Map<Workbook, CellStyle> NUMERIC_STYLE_CACHE = new java.util.WeakHashMap<>();
+    private static final Map<Workbook, DataFormat> DATA_FORMAT_CACHE = new java.util.WeakHashMap<>();
+
+    private static CellStyle getNumericStyle(Workbook wb) {
+        CellStyle style = NUMERIC_STYLE_CACHE.get(wb);
+        if (style != null) {
+            return style;
+        }
+
+        DataFormat fmt = DATA_FORMAT_CACHE.computeIfAbsent(wb, k -> k.createDataFormat());
+
+        style = wb.createCellStyle();
+        style.setDataFormat(fmt.getFormat("#,##0.00"));
+        NUMERIC_STYLE_CACHE.put(wb, style);
+        return style;
+    }
+
     public static void storeCSVToForm(HttpServletRequest request, DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String formDefId, String fileFieldId, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator,
             String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) {
         try {
@@ -157,7 +174,6 @@ public class DownloadCsvOrExcelUtil {
 
         writer.flush();
         String csvContent = stringWriter.toString();
-
 
         File outFile = generateCSVOutputFile(csvContent, fileName);
 
@@ -520,13 +536,11 @@ public class DownloadCsvOrExcelUtil {
 
         // number format for excel
         Workbook workbook = sheet.getWorkbook();
-        DataFormat format = workbook.createDataFormat();
-        CellStyle numberStyle = workbook.createCellStyle();
-        numberStyle.setDataFormat(format.getFormat("#,##0.00"));
+        CellStyle numberStyle = getNumericStyle(sheet.getWorkbook());
 
         // get numeric column from config
         Set<String> numericColumns = new HashSet<>();
-        
+
         if ("true".equals(exportNumeric)) {
             if (gridColumns != null && gridColumns.length > 0) {
                 for (Object o : gridColumns) {
@@ -545,7 +559,7 @@ public class DownloadCsvOrExcelUtil {
                 // Process image/file - this might consume multiple columns if there are multiple images
                 z = processImageOrFile(currentAppDef, sheet, dataRow, rowCounter, rows, x, value, z);
             } else {
-                  Cell dataRowCell = dataRow.createCell(z);
+                Cell dataRowCell = dataRow.createCell(z);
 
                 // check if this column is numeric
                 if ("true".equals(exportNumeric) && numericColumns.contains(myStr) && NumberUtils.isParsable(value)) {
