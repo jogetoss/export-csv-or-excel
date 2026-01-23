@@ -29,7 +29,7 @@ import org.joget.commons.util.UuidGenerator;
 import org.joget.marketplace.util.DownloadCsvOrExcelUtil;
 import org.joget.plugin.base.PluginWebSupport;
 
-public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault implements PluginWebSupport{
+public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault implements PluginWebSupport {
 
     private final static String MESSAGE_PATH = "messages/DownloadCSVOrExcelDatalistAction";
 
@@ -114,11 +114,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         String renameFile = getPropertyString("renameFile");
         String fileName = getPropertyString("filename");
         String delimiter = getPropertyString("delimiter");
-        String headerDecorator = getPropertyString("headerDecorator"); 
-        String downloadAllWhenNoneSelected = getPropertyString("downloadAllWhenNoneSelected"); 
+        String headerDecorator = getPropertyString("headerDecorator");
+        String downloadAllWhenNoneSelected = getPropertyString("downloadAllWhenNoneSelected");
         String footerDecorator = getPropertyString("footerDecorator");
-        String includeCustomHeader = getPropertyString("includeCustomHeader"); 
-        String footerHeader = getPropertyString("footerHeader"); 
+        String includeCustomHeader = getPropertyString("includeCustomHeader");
+        String footerHeader = getPropertyString("footerHeader");
         String includeCustomFooter = getPropertyString("includeCustomFooter");
         String formDefId = getPropertyString("formDefId");
         String fileFieldId = getPropertyString("fileFieldId");
@@ -151,7 +151,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                     // Store CSV to form if enabled (separate from download)
                     if (storeToForm) {
-                        DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, dataListRows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter, exportEncrypt);
+                        DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, dataListRows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
                     }
                 } else {
                     String downloadBackgroud = getPropertyString("downloadBackgroud");
@@ -199,7 +199,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         excelDownloadThread.start();
 
                         AppDefinition appDefination = AppUtil.getCurrentAppDefinition();
-                        String url = "/jw/web/json/app/" + appDefination.getAppId() + "/" + appDefination.getVersion() + "/plugin/org.joget.marketplace.DownloadCsvOrExcelDatalistAction/service?uniqueId=" + uniqueId + "&filename=" + excelFileName + "&storeToForm=" + getPropertyString("storeToForm") + "&downloadBackgroud=" + getPropertyString("downloadBackgroud");
+                        String url = "/jw/web/json/app/" + appDefination.getAppId() + "/" + appDefination.getVersion()
+                                + "/plugin/org.joget.marketplace.DownloadCsvOrExcelDatalistAction/service?uniqueId=" + uniqueId
+                                + "&filename=" + java.net.URLEncoder.encode(excelFileName, "UTF-8")
+                                + "&storeToForm=" + getPropertyString("storeToForm")
+                                + "&downloadBackgroud=" + getPropertyString("downloadBackgroud");
                         result.setUrl(url);
 
                     } else {
@@ -259,7 +263,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         }
     }
 
-     @Override
+    @Override
     public void webService(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         boolean roleAnonymous = WorkflowUtil.isCurrentUserInRole(WorkflowUserManager.ROLE_ANONYMOUS);
         if (roleAnonymous) {
@@ -269,6 +273,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
         String uniqueId = request.getParameter("uniqueId");
         String filename = request.getParameter("filename");
+        try {
+            filename = java.net.URLDecoder.decode(filename, "UTF-8");
+        } catch (Exception e) {
+            LogUtil.error(getClassName(), e, "Failed to decode filename");
+        }
         String status = request.getParameter("status");
         boolean storeToForm = Boolean.parseBoolean(request.getParameter("storeToForm"));  // Assuming this parameter exists
         boolean downloadBackground = Boolean.parseBoolean(request.getParameter("downloadBackgroud"));  // Assuming this parameter exists
