@@ -51,6 +51,8 @@ import org.apache.poi.ss.usermodel.Picture;
 import org.apache.tika.Tika;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.app.service.AppService;
+import org.joget.apps.datalist.lib.BeanShellColumn;
+import org.joget.apps.datalist.model.DataListDisplayColumnProxy;
 import org.joget.apps.form.model.FormRowSet;
 import org.joget.apps.form.service.FileUtil;
 import org.joget.apps.form.service.FormUtil;
@@ -431,7 +433,9 @@ public class DownloadCsvOrExcelUtil {
         }
     }
 
-    protected static String getBinderFormattedValue(DataList dataList, Object o, String name, String exportImages, String exportEncrypt) {
+    protected static String getBinderFormattedValue(DataList dataList, Object o, String name,
+            String exportImages, String exportEncrypt) {
+
         DataListColumn[] columns = dataList.getColumns();
         int skip = duplicates.getSkipCount(name);
         for (DataListColumn c : columns) {
@@ -440,22 +444,26 @@ public class DownloadCsvOrExcelUtil {
                 if ("true".equals(exportImages)) {
                     Collection<DataListColumnFormat> formatsList = c.getFormats();
                     if (formatsList != null && !formatsList.isEmpty()) {
-                        DataListColumnFormat firstFormat = null;
-                        firstFormat = formatsList.iterator().next();
+                        DataListColumnFormat firstFormat = formatsList.iterator().next();
+
                         if (firstFormat != null) {
                             String formatterClassName = firstFormat.getClassName();
                             String filename = DataListService.evaluateColumnValueFromRow(o, name).toString();
                             if ("org.joget.apps.datalist.lib.ImageFormatter".equals(formatterClassName)) {
-                                // image upload field
+
                                 String formDefId = (String) firstFormat.getProperty("formDefId");
-                                String imageSrc = (String) firstFormat.getProperty("imageSrc"); // imageSrc => form
+                                String imageSrc = (String) firstFormat.getProperty("imageSrc");
+
                                 if ("form".equals(imageSrc) && filename != null && !filename.isEmpty()) {
                                     return "IMAGE:" + formDefId + ":" + imageSrc + ":" + filename;
                                 }
                             } else if ("org.joget.tutorial.FileLinkDatalistFormatter".equals(formatterClassName)) {
                                 // file upload field
                                 String formDefId = (String) firstFormat.getProperty("formDefId");
-                                if (formDefId != null && !formDefId.isEmpty() && filename != null && !filename.isEmpty()) {
+
+                                if (formDefId != null && !formDefId.isEmpty()
+                                        && filename != null && !filename.isEmpty()) {
+
                                     return "FILE:" + formDefId + ":" + filename;
                                 }
                             }
@@ -473,20 +481,47 @@ public class DownloadCsvOrExcelUtil {
                     }
                 }
 
-                String value;
                 try {
-                    value = DataListService.evaluateColumnValueFromRow(o, name).toString();
+
+                    Object valueObj = null;
+
+                    if (c instanceof DataListDisplayColumnProxy) {
+
+                        DataListDisplayColumnProxy proxy
+                                = (DataListDisplayColumnProxy) c;
+
+                        Object displayColumn = proxy.getDisplayColumn();
+
+                        if (displayColumn instanceof BeanShellColumn) {
+
+                            valueObj
+                                    = ((BeanShellColumn) displayColumn)
+                                            .getRowValue(o, 0);
+                        }
+                    }
+
+                    if (valueObj == null) {
+                        valueObj = DataListService.evaluateColumnValueFromRow(o, name);
+                    }
+
+                    String value = valueObj != null ? valueObj.toString() : "";
 
                     if (!"true".equals(exportEncrypt)) {
                         value = SecurityUtil.decrypt(value);
                     }
 
                     Collection<DataListColumnFormat> formats = c.getFormats();
+
                     if (formats != null) {
                         for (DataListColumnFormat f : formats) {
+
                             if (f != null) {
+
                                 value = f.format(dataList, c, o, value);
-                                String stripHTML = value.replaceAll("<[^>]*>", "");
+
+                                String stripHTML
+                                        = value.replaceAll("<[^>]*>", "");
+
                                 return stripHTML;
                             } else {
                                 return value;
@@ -495,11 +530,14 @@ public class DownloadCsvOrExcelUtil {
                     } else {
                         return value;
                     }
-                } catch (Exception ex) {
 
+                } catch (Exception ex) {
+                    LogUtil.error(getClassName(), ex,
+                            "Error processing column : " + name);
                 }
             }
         }
+
         return "";
     }
 
@@ -771,7 +809,9 @@ public class DownloadCsvOrExcelUtil {
 
         String name = file.getName();
         String parent = file.getParent();
-        if (parent == null) parent = ".";
+        if (parent == null) {
+            parent = ".";
+        }
 
         String baseName;
         String extension = "";
