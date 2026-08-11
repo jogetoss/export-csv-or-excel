@@ -224,24 +224,33 @@ public class DownloadCsvOrExcelUtil {
         writer.write((headerSB + ""));
 
         if (rowKeys != null && rowKeys.length > 0) {
-            //goes through all the datalist row
-            for (int x = 0; x < dataListRows.size(); x++) {
-                //compare with all the rowkeys that have been selected
-                for (String rowKey : rowKeys) {
-
-                    //check instance of HashMap if not it will be Formrow
-                    boolean boolInstance = dataListRows.get(x) instanceof HashMap;
-                    boolean foundRowKey = foundRowKey(boolInstance, dataListRows, x, rowKey);
-
-                    //if no row is found skip
-                    if (!foundRowKey) {
-                        continue;
-                    }
-
+            if (!dataList.isUseSession()) {
+                // rows already filtered by primary key IN (...); skip "id" matching
+                for (int x = 0; x < dataListRows.size(); x++) {
                     Object row = getRow(dataListRows, x);
-
-                    //get the keys and save it
                     writeCSVContents(dataList, null, keys, row, writer, delimiter, exportEncrypt);
+                }
+            } else {
+                //goes through all the datalist row
+                for (int x = 0; x < dataListRows.size(); x++) {
+                    //compare with all the rowkeys that have been selected
+                    for (String rowKey : rowKeys) {
+
+                        //check instance of HashMap if not it will be Formrow
+                        boolean boolInstance = dataListRows.get(x) instanceof HashMap;
+                        boolean foundRowKey = foundRowKey(boolInstance, dataListRows, x, rowKey);
+
+                        //if no row is found skip
+                        if (!foundRowKey) {
+                            continue;
+                        }
+
+                        Object row = getRow(dataListRows, x);
+
+                        //get the keys and save it
+                        writeCSVContents(dataList, null, keys, row, writer, delimiter, exportEncrypt);
+                        break;
+                    }
                 }
             }
 
@@ -332,18 +341,28 @@ public class DownloadCsvOrExcelUtil {
         AppDefinition currentAppDef = AppUtil.getCurrentAppDefinition();
 
         if (rowKeys != null && rowKeys.length > 0) {
-            for (int x = 0; x < rows.size(); x++) {
-                //compare with all the rowkeys that have been selected
-                for (int y = 0; y < rowKeys.length; y++) {
-                    boolean boolInstance = rows.get(x) instanceof HashMap;
-                    boolean foundRowKey = foundRowKey(boolInstance, rows, x, rowKeys[y]);
-
-                    if (!foundRowKey) {
-                        continue;
-                    }
+            if (!dataList.isUseSession()) {
+                // rows already filtered by primary key IN (...); skip "id" matching
+                for (int x = 0; x < rows.size(); x++) {
                     printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt, exportNumeric, gridColumns);
                     counter += 1;
                     rowCounter += 1;
+                }
+            } else {
+                for (int x = 0; x < rows.size(); x++) {
+                    //compare with all the rowkeys that have been selected
+                    for (int y = 0; y < rowKeys.length; y++) {
+                        boolean boolInstance = rows.get(x) instanceof HashMap;
+                        boolean foundRowKey = foundRowKey(boolInstance, rows, x, rowKeys[y]);
+
+                        if (!foundRowKey) {
+                            continue;
+                        }
+                        printExcel(currentAppDef, sheet, rowCounter, counter, rows, x, res, dataList, exportImages, exportEncrypt, exportNumeric, gridColumns);
+                        counter += 1;
+                        rowCounter += 1;
+                        break;
+                    }
                 }
             }
 
@@ -752,11 +771,10 @@ public class DownloadCsvOrExcelUtil {
     }
 
     protected static boolean foundRowKey(boolean boolInstance, DataListCollection rows, int x, String rowKey) {
-        if (boolInstance) {
-            return ((HashMap) rows.get(x)).get("id").equals(rowKey);
-        } else {
-            return ((FormRow) rows.get(x)).get("id").equals(rowKey);
-        }
+        Object idValue = boolInstance
+                ? ((HashMap) rows.get(x)).get("id")
+                : ((FormRow) rows.get(x)).get("id");
+        return idValue != null && idValue.equals(rowKey);
     }
 
     protected static boolean getFooter(String footerHeader) {
