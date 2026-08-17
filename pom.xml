@@ -4,7 +4,7 @@
     <groupId>org.joget.marketplace</groupId>
     <artifactId>export-csv-or-excel</artifactId>
     <packaging>bundle</packaging>
-    <version>8.0.21</version>
+    <version>8.0.22</version>
     <name>export-csv-or-excel</name>
     <url>http://www.joget.org</url>
     <build>
@@ -84,6 +84,12 @@
                     <groupId>javax.servlet</groupId>
                     <artifactId>javax.servlet-api</artifactId>
                 </exclusion>
+                <!-- The plugin already uses log4j-to-slf4j. Exclude the
+                     opposite test-classpath binding to avoid a Log4j loop. -->
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                </exclusion>
             </exclusions>
             <scope>provided</scope>
         </dependency>
@@ -91,6 +97,12 @@
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
             <version>2.4</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet.jsp</groupId>
+            <artifactId>jsp-api</artifactId>
+            <version>2.1</version>
+            <scope>test</scope>
         </dependency>
         <!-- Change plugin specific dependencies here -->
         <dependency>

@@ -1,21 +1,22 @@
 package org.joget.marketplace;
 
-import org.apache.poi.ss.usermodel.Workbook;
 import org.joget.apps.app.service.AppPluginUtil;
-import org.joget.apps.app.service.AppService;
 import org.joget.apps.app.service.AppUtil;
 import org.joget.apps.datalist.model.DataList;
 import org.joget.apps.datalist.model.DataListCollection;
+import org.joget.apps.datalist.model.DataListFilterQueryObject;
 import org.joget.apps.datalist.service.DataListService;
 import org.joget.commons.util.LogUtil;
+import org.joget.commons.util.FileManager;
+import org.joget.commons.util.UuidGenerator;
 import org.joget.workflow.util.WorkflowUtil;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 
 import javax.servlet.http.HttpServletRequest;
-import java.util.HashMap;
 import java.util.Map;
 import java.io.File;
+import java.io.IOException;
 
 import org.joget.apps.app.dao.DatalistDefinitionDao;
 import org.joget.apps.app.model.AppDefinition;
@@ -84,29 +85,21 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
         String exportNumeric = getPropertyString("exportNumeric");
         Object[] selectedNumericColumn = (Object[]) properties.get("selectedNumericColumn");
 
-        ApplicationContext ac = AppUtil.getApplicationContext();
-        AppService appService = (AppService) ac.getBean("appService");
-        AppDefinition appDef = AppUtil.getCurrentAppDefinition();
-
         HttpServletRequest request = WorkflowUtil.getHttpServletRequest();
         if (request != null && !"POST".equalsIgnoreCase(request.getMethod())) {
             return null;
         }
  
         DataList dataList = getDataList(getPropertyString("listDefId"));
-        DataListCollection rows = dataList.getRows();
         String[] rowKeys = null;
+        DataListCollection selectedRows = null;
         String recordId = getPropertyString("recordId");
-        if (recordId == null || recordId.equals("")) {
-            // get all rowkeys
-            rowKeys = new String[rows.size()];
-            for (int i = 0; i < rows.size(); i++) {
-                Object idObj = ((HashMap) rows.get(i)).get("id");
-                rowKeys[i] = idObj != null ? idObj.toString() : null;
-            }
-        } else {
-            // specified row
+        if (recordId != null && !recordId.isEmpty()) {
+            // Preserve the original record-id behavior. Only this small
+            // selected-row path is preloaded; all-row exports are now paged.
             rowKeys = new String[] {recordId};
+            addRecordIdFilter(dataList, rowKeys);
+            selectedRows = dataList.getRows();
         }
 
         if ("FILE_PATH".equalsIgnoreCase(pathOptions)) {
@@ -114,11 +107,10 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
             try {
                 if(getDownloadAs()){
                     String filename = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
-                    outputFile = DownloadCsvOrExcelUtil.generateCSVFile(dataList, rows, rowKeys, renameFile, filePath + "/" + filename, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
+                    outputFile = DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, new File(filePath, filename), true, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
                 } else {
-                    Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
                     String filename =renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
-                    outputFile = DownloadCsvOrExcelUtil.generateExcelOutputFile(workbook, filePath + "/" + filename);
+                    outputFile = DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, new File(filePath, filename), true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
                 }
                 if (outputFile.exists()) {
                     LogUtil.info(getClassName(), "File saved to: " + filePath);
@@ -127,17 +119,46 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
                  LogUtil.error(getClassName(), e, e.getMessage());   
             }
         } else if ("FORM_FIELD".equalsIgnoreCase(pathOptions)) {
-            if(getDownloadAs()){
-                DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, rows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader,  footerHeader, includeCustomFooter, exportEncrypt);
-            } else {
-                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
-                DownloadCsvOrExcelUtil.storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx", renameFile, formDefId, fileFieldId);
+            String generatedName = renameFile.equalsIgnoreCase("true") ? fileName + (getDownloadAs() ? ".csv" : ".xlsx") : (getDownloadAs() ? "report.csv" : "report.xlsx");
+            File tempFolder = new File(FileManager.getBaseDirectory(), UuidGenerator.getInstance().getUuid());
+            File generatedFile = new File(tempFolder, generatedName);
+            try {
+                if (getDownloadAs()) {
+                    DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, generatedFile, false, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
+                } else {
+                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, generatedFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
+                }
+                DownloadCsvOrExcelUtil.storeGeneratedFileToForm(generatedFile, formDefId, fileFieldId);
+            } catch (IOException e) {
+                LogUtil.error(getClassName(), e, "Failed to generate file for form storage");
+            } finally {
+                deleteTemporaryExport(generatedFile, tempFolder);
             }
             LogUtil.info(getClassName(), "File saved to form");
         }
         
         
         return null;
+    }
+
+    private void deleteTemporaryExport(File generatedFile, File tempFolder) {
+        if (generatedFile.exists() && !generatedFile.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete temporary export file: " + generatedFile);
+        }
+        if (tempFolder.isDirectory() && !tempFolder.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete temporary export folder: " + tempFolder);
+        }
+    }
+
+    private void addRecordIdFilter(DataList dataList, String[] rowKeys) {
+        if (!dataList.isUseSession()) {
+            DataListFilterQueryObject filter = new DataListFilterQueryObject();
+            filter.setOperator("AND");
+            String column = dataList.getBinder().getColumnName(dataList.getBinder().getPrimaryKeyColumnName());
+            filter.setQuery(column + " IN (?)");
+            filter.setValues(rowKeys);
+            dataList.addFilterQueryObject(filter);
+        }
     }
 
     protected static DataList getDataList(String datalistId) throws BeansException {

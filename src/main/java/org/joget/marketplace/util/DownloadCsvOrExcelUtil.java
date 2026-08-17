@@ -4,6 +4,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.joget.apps.app.service.AppUtil;
 import org.joget.apps.datalist.model.DataList;
@@ -21,14 +22,20 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URLEncoder;
-import java.text.DecimalFormat;
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import java.util.HashMap;
@@ -41,6 +48,7 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.poi.ss.usermodel.ClientAnchor;
@@ -57,10 +65,24 @@ import org.joget.apps.form.model.FormRowSet;
 import org.joget.apps.form.service.FileUtil;
 import org.joget.apps.form.service.FormUtil;
 import org.joget.commons.util.UuidGenerator;
-import org.joget.workflow.util.WorkflowUtil;
 import org.springframework.context.ApplicationContext;
 
 public class DownloadCsvOrExcelUtil {
+
+    /*
+     * Streaming export settings.
+     *
+     * DATA_BATCH_SIZE controls how many records are fetched from the datalist
+     * binder at one time. SXSSF_ROW_WINDOW controls how many Excel rows Apache
+     * POI retains in heap before flushing older rows to its temporary files.
+     * These deliberately remain separate so they can be tuned independently
+     * after the one-million-row performance test.
+     */
+    public static final int DATA_BATCH_SIZE = 2000;
+    public static final int SXSSF_ROW_WINDOW = 100;
+    private static final int XLSX_MAX_ROWS_PER_SHEET = 1048576;
+    private static final int FILE_COPY_BUFFER_SIZE = 64 * 1024;
+    private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[^>]*>");
 
     private final static DuplicateAndSkip duplicates = new DuplicateAndSkip();
 
@@ -82,6 +104,17 @@ public class DownloadCsvOrExcelUtil {
         style = wb.createCellStyle();
         style.setDataFormat(fmt.getFormat("#,##0.00"));
         NUMERIC_STYLE_CACHE.put(wb, style);
+        return style;
+    }
+
+    /**
+     * Streaming exports create one style per workbook. They do not use the
+     * legacy static WeakHashMap caches, which are shared across export threads.
+     */
+    private static CellStyle createStreamingNumericStyle(Workbook workbook) {
+        DataFormat format = workbook.createDataFormat();
+        CellStyle style = workbook.createCellStyle();
+        style.setDataFormat(format.getFormat("#,##0.00"));
         return style;
     }
 
@@ -299,6 +332,613 @@ public class DownloadCsvOrExcelUtil {
 
     }
 
+    // ---------------------------------------------------------------------
+    // New bounded-memory CSV export path
+    // ---------------------------------------------------------------------
+
+    /**
+     * Writes CSV rows incrementally to disk. The legacy generateCSVFile(...)
+     * method is preserved above, but it builds the full CSV in a StringWriter.
+     */
+    public static File generateStreamingCSVFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) throws IOException {
+        long exportStartedAt = System.currentTimeMillis();
+        int totalRows = getExpectedExportRows(dataList, selectedRows, rowKeys, downloadAllWhenNoneSelected);
+        File outputFile = makeUnique ? getUniqueFile(requestedFile.getPath()) : requestedFile;
+        File parent = outputFile.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+            throw new IOException("Unable to create export directory: " + parent);
+        }
+        String actualDelimiter = delimiter == null || delimiter.isEmpty() ? "," : delimiter;
+        LogUtil.info(getClassName(), getExportStartMessage("CSV", totalRows, outputFile));
+
+        boolean completed = false;
+        long processedRows = 0;
+        try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(new BufferedOutputStream(new FileOutputStream(outputFile), FILE_COPY_BUFFER_SIZE), "UTF-8"))) {
+            List<DataListColumn> columns = getExportColumns(dataList);
+            if (includeCustomHeader(includeCustomHeader)) {
+                writer.write(headerDecorator);
+                writer.write("\n");
+            }
+            writeStreamingCSVHeader(writer, columns, actualDelimiter);
+
+            if (rowKeys != null && rowKeys.length > 0) {
+                Set<String> selectedKeySet = new HashSet<>(Arrays.asList(rowKeys));
+                if (selectedRows != null) {
+                    for (int i = 0; i < selectedRows.size(); i++) {
+                        if (selectedKeySet.contains(findRowKey(selectedRows, i))) {
+                            writeStreamingCSVRow(writer, dataList, getRow(selectedRows, i), columns, actualDelimiter, exportEncrypt);
+                            processedRows++;
+                        }
+                    }
+                    logExportBatch("CSV", 1, selectedRows.size(), processedRows, totalRows, exportStartedAt);
+                }
+            } else if ("true".equals(downloadAllWhenNoneSelected)) {
+                int start = 0;
+                int batchNumber = 0;
+                while (true) {
+                    DataListCollection batch = dataList.getRows(DATA_BATCH_SIZE, start);
+                    if (batch == null || batch.isEmpty()) {
+                        break;
+                    }
+                    for (int i = 0; i < batch.size(); i++) {
+                        writeStreamingCSVRow(writer, dataList, getRow(batch, i), columns, actualDelimiter, exportEncrypt);
+                    }
+                    int fetched = batch.size();
+                    batchNumber++;
+                    processedRows += fetched;
+                    start += fetched;
+                    logExportBatch("CSV", batchNumber, fetched, processedRows, totalRows, exportStartedAt);
+                    if (fetched < DATA_BATCH_SIZE) {
+                        break;
+                    }
+                }
+            }
+
+            if (getFooter(footerHeader)) {
+                writer.write("\n");
+                writeStreamingCSVHeader(writer, columns, actualDelimiter);
+            }
+            if (includeCustomFooter(includeCustomFooter)) {
+                writer.write("\n");
+                writer.write(footerDecorator);
+                writer.write("\n");
+            }
+            writer.flush();
+            if (writer.checkError()) {
+                throw new IOException("Failed while writing CSV export: " + outputFile);
+            }
+            completed = true;
+        } finally {
+            if (!completed && outputFile.exists() && !outputFile.delete()) {
+                LogUtil.warn(getClassName(), "Unable to delete incomplete export file: " + outputFile);
+            }
+            if (!completed) {
+                LogUtil.info(getClassName(), getExportFailureMessage("CSV", processedRows, totalRows, exportStartedAt));
+            }
+        }
+        LogUtil.info(getClassName(), getExportCompletionMessage("CSV", processedRows, totalRows, outputFile, exportStartedAt));
+        return outputFile;
+    }
+
+    private static void writeStreamingCSVHeader(PrintWriter writer, List<DataListColumn> columns, String delimiter) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) {
+                writer.write(delimiter);
+            }
+            writeEscapedCSVValue(writer, columns.get(i).getLabel(), delimiter);
+        }
+    }
+
+    private static void writeStreamingCSVRow(PrintWriter writer, DataList dataList, Object row, List<DataListColumn> columns, String delimiter, String exportEncrypt) {
+        writer.write("\r\n");
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) {
+                writer.write(delimiter);
+            }
+            String value = getStreamingFormattedValue(dataList, row, columns.get(i), null, exportEncrypt);
+            writeEscapedCSVValue(writer, value, delimiter);
+        }
+        // Do not flush per row. The buffered stream is flushed on close.
+    }
+
+    private static void writeEscapedCSVValue(PrintWriter writer, String value, String delimiter) {
+        String safeValue = value == null ? "" : value;
+        boolean quote = safeValue.contains(delimiter) || safeValue.indexOf('"') >= 0 || safeValue.indexOf('\r') >= 0 || safeValue.indexOf('\n') >= 0;
+        if (quote) {
+            writer.write('"');
+            writer.write(safeValue.replace("\"", "\"\""));
+            writer.write('"');
+        } else {
+            writer.write(safeValue);
+        }
+    }
+
+    public static void streamCSVFileToResponse(HttpServletResponse response, File csvFile, String filename) throws IOException {
+        String name = URLEncoder.encode(filename, "UTF8").replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename=" + name + "; filename*=UTF-8''" + name);
+        response.setHeader("Content-Length", Long.toString(csvFile.length()));
+        response.setContentType("text/csv; charset=UTF-8");
+        try (InputStream in = new BufferedInputStream(new java.io.FileInputStream(csvFile), FILE_COPY_BUFFER_SIZE); OutputStream out = new BufferedOutputStream(response.getOutputStream(), FILE_COPY_BUFFER_SIZE)) {
+            byte[] buffer = new byte[FILE_COPY_BUFFER_SIZE];
+            int length;
+            while ((length = in.read(buffer)) != -1) {
+                out.write(buffer, 0, length);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // New bounded-memory Excel export path
+    // ---------------------------------------------------------------------
+
+    /**
+     * Generates an XLSX file without retaining the complete workbook or the
+     * complete datalist result in JVM memory.
+     *
+     * The original getExcel(...) method below is intentionally preserved for
+     * comparison/review. New call sites should use this method.
+     *
+     * @param selectedRows rows already filtered for a selected-row export;
+     *                     pass null when exporting all rows so this method can
+     *                     fetch the datalist in batches
+     * @param makeUnique   true for user-configured file paths, false when the
+     *                     caller already supplied a unique background-job path
+     */
+    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) throws IOException {
+
+        long exportStartedAt = System.currentTimeMillis();
+        int totalRows = getExpectedExportRows(dataList, selectedRows, rowKeys, downloadAllWhenNoneSelected);
+        File outputFile = makeUnique ? getUniqueFile(requestedFile.getPath()) : requestedFile;
+        File parent = outputFile.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+            throw new IOException("Unable to create export directory: " + parent);
+        }
+
+        SXSSFWorkbook workbook = new SXSSFWorkbook(SXSSF_ROW_WINDOW);
+        // Compress POI's XML temporary files to reduce disk usage for 1M+ rows.
+        workbook.setCompressTempFiles(true);
+        LogUtil.info(getClassName(), getExportStartMessage("Excel", totalRows, outputFile));
+
+        boolean completed = false;
+        long processedRows = 0;
+        try {
+            StreamingExcelContext context = new StreamingExcelContext(workbook, dataList, headerDecorator, includeCustomHeader, exportImages, exportEncrypt, exportNumeric, gridColumns);
+
+            if (rowKeys != null && rowKeys.length > 0) {
+                // Selected-row exports normally contain a relatively small set.
+                // A HashSet avoids the legacy rows x selectedKeys nested loop.
+                Set<String> selectedKeySet = new HashSet<>(Arrays.asList(rowKeys));
+                appendSelectedRows(context, selectedRows, selectedKeySet);
+                processedRows = context.getExportedRowCount();
+                logExportBatch("Excel", 1, selectedRows != null ? selectedRows.size() : 0, processedRows, totalRows, exportStartedAt);
+            } else if ("true".equals(downloadAllWhenNoneSelected)) {
+                appendAllRowsInBatches(context, dataList, totalRows, exportStartedAt);
+                processedRows = context.getExportedRowCount();
+            }
+
+            context.appendFooter(footerHeader, footerDecorator, includeCustomFooter);
+
+            // SXSSFWorkbook has already flushed old rows to disk. This final
+            // write assembles the OOXML package directly into the target file.
+            LogUtil.info(getClassName(), "TEMP PERF - Excel row processing completed; finalizing workbook: processedRows=" + processedRows + ", elapsedMs=" + (System.currentTimeMillis() - exportStartedAt) + ", usedHeapMB=" + getUsedHeapMB());
+            try (OutputStream out = new BufferedOutputStream(new FileOutputStream(outputFile), FILE_COPY_BUFFER_SIZE)) {
+                workbook.write(out);
+            }
+            completed = true;
+        } finally {
+            try {
+                workbook.close();
+            } finally {
+                // dispose() is required to remove SXSSF worksheet temp files.
+                workbook.dispose();
+            }
+            if (!completed && outputFile.exists() && !outputFile.delete()) {
+                LogUtil.warn(getClassName(), "Unable to delete incomplete export file: " + outputFile);
+            }
+            if (!completed) {
+                LogUtil.info(getClassName(), getExportFailureMessage("Excel", processedRows, totalRows, exportStartedAt));
+            }
+        }
+        LogUtil.info(getClassName(), getExportCompletionMessage("Excel", processedRows, totalRows, outputFile, exportStartedAt));
+        return outputFile;
+    }
+
+    private static void appendAllRowsInBatches(StreamingExcelContext context, DataList dataList, int totalRows, long exportStartedAt) {
+        int start = 0;
+        int batchNumber = 0;
+        while (true) {
+            DataListCollection batch = dataList.getRows(DATA_BATCH_SIZE, start);
+            if (batch == null || batch.isEmpty()) {
+                break;
+            }
+            for (int i = 0; i < batch.size(); i++) {
+                context.appendRow(batch, i);
+            }
+            int fetched = batch.size();
+            batchNumber++;
+            start += fetched;
+            logExportBatch("Excel", batchNumber, fetched, context.getExportedRowCount(), totalRows, exportStartedAt);
+            // A short final batch proves that there are no more records and
+            // avoids one additional database query.
+            if (fetched < DATA_BATCH_SIZE) {
+                break;
+            }
+        }
+    }
+
+    private static void appendSelectedRows(StreamingExcelContext context, DataListCollection rows, Set<String> selectedKeys) {
+        if (rows == null) {
+            return;
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            if (selectedKeys.contains(findRowKey(rows, i))) {
+                context.appendRow(rows, i);
+            }
+        }
+    }
+
+    /**
+     * Streams an already generated file to the servlet response without the
+     * legacy ByteArrayOutputStream/toByteArray full-file memory copies.
+     */
+    public static void streamExcelFileToResponse(HttpServletResponse response, File excelFile, String filename) throws IOException {
+        String name = URLEncoder.encode(filename, "UTF8").replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename=" + name + "; filename*=UTF-8''" + name);
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        // The plugin still targets the Servlet 2.4 API, which does not expose
+        // setContentLengthLong(). Setting the header supports files over 2 GB.
+        response.setHeader("Content-Length", Long.toString(excelFile.length()));
+
+        try (InputStream in = new BufferedInputStream(new java.io.FileInputStream(excelFile), FILE_COPY_BUFFER_SIZE); OutputStream out = new BufferedOutputStream(response.getOutputStream(), FILE_COPY_BUFFER_SIZE)) {
+            byte[] buffer = new byte[FILE_COPY_BUFFER_SIZE];
+            int length;
+            while ((length = in.read(buffer)) != -1) {
+                out.write(buffer, 0, length);
+            }
+        }
+    }
+
+    /** Makes the existing form-storage operation reusable by the new file path. */
+    public static void storeGeneratedFileToForm(File generatedFile, String formDefId, String fileFieldId) {
+        storeGeneratedFile(generatedFile, formDefId, fileFieldId);
+    }
+
+    // Temporary performance logging helpers for the large-dataset test.
+    private static int getExpectedExportRows(DataList dataList, DataListCollection selectedRows, String[] rowKeys, String downloadAllWhenNoneSelected) {
+        if (rowKeys != null && rowKeys.length > 0) {
+            return rowKeys.length;
+        }
+        if ("true".equals(downloadAllWhenNoneSelected)) {
+            return dataList.getTotal();
+        }
+        return selectedRows != null ? selectedRows.size() : 0;
+    }
+
+    private static String getExportStartMessage(String exportType, int totalRows, File outputFile) {
+        return "TEMP PERF - " + exportType + " export started: totalRows=" + totalRows + ", dataBatchSize=" + DATA_BATCH_SIZE + ", sxssfRowWindow=" + SXSSF_ROW_WINDOW + ", usedHeapMB=" + getUsedHeapMB() + ", maxHeapMB=" + getMaxHeapMB() + ", output=" + outputFile.getPath();
+    }
+
+    private static void logExportBatch(String exportType, int batchNumber, int fetchedRows, long processedRows, int totalRows, long exportStartedAt) {
+        long percentage = totalRows > 0 ? Math.min(100, processedRows * 100 / totalRows) : 0;
+        LogUtil.info(getClassName(), "TEMP PERF - " + exportType + " batch processed: batch=" + batchNumber + ", fetchedRows=" + fetchedRows + ", processedRows=" + processedRows + ", totalRows=" + totalRows + ", progress=" + percentage + "%, elapsedMs=" + (System.currentTimeMillis() - exportStartedAt) + ", usedHeapMB=" + getUsedHeapMB());
+    }
+
+    private static String getExportCompletionMessage(String exportType, long processedRows, int totalRows, File outputFile, long exportStartedAt) {
+        return "TEMP PERF - " + exportType + " export completed: processedRows=" + processedRows + ", totalRows=" + totalRows + ", elapsedMs=" + (System.currentTimeMillis() - exportStartedAt) + ", fileSizeBytes=" + outputFile.length() + ", usedHeapMB=" + getUsedHeapMB() + ", output=" + outputFile.getPath();
+    }
+
+    private static String getExportFailureMessage(String exportType, long processedRows, int totalRows, long exportStartedAt) {
+        return "TEMP PERF - " + exportType + " export failed: processedRows=" + processedRows + ", totalRows=" + totalRows + ", elapsedMs=" + (System.currentTimeMillis() - exportStartedAt) + ", usedHeapMB=" + getUsedHeapMB();
+    }
+
+    private static long getUsedHeapMB() {
+        Runtime runtime = Runtime.getRuntime();
+        return (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
+    }
+
+    private static long getMaxHeapMB() {
+        return Runtime.getRuntime().maxMemory() / (1024 * 1024);
+    }
+
+    private static final class StreamingExcelContext {
+        private final SXSSFWorkbook workbook;
+        private final DataList dataList;
+        private final List<DataListColumn> columns;
+        private final String[] headers;
+        private final String headerDecorator;
+        private final boolean includeHeaderDecorator;
+        private final String exportImages;
+        private final String exportEncrypt;
+        private final Set<String> numericColumns;
+        private final CellStyle numericStyle;
+        private final AppDefinition appDef;
+        private Sheet sheet;
+        private StreamingImageSupport imageSupport;
+        private int sheetNumber;
+        private int rowNumber;
+        private long exportedRowCount;
+
+        private StreamingExcelContext(SXSSFWorkbook workbook, DataList dataList, String headerDecorator, String includeCustomHeader, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) {
+            this.workbook = workbook;
+            this.dataList = dataList;
+            this.columns = getExportColumns(dataList);
+            this.headers = new String[columns.size()];
+            for (int i = 0; i < columns.size(); i++) {
+                headers[i] = columns.get(i).getLabel();
+            }
+            this.headerDecorator = headerDecorator;
+            this.includeHeaderDecorator = includeCustomHeader(includeCustomHeader);
+            this.exportImages = exportImages;
+            this.exportEncrypt = exportEncrypt;
+            this.numericColumns = getNumericColumns(exportNumeric, gridColumns);
+            this.numericStyle = createStreamingNumericStyle(workbook);
+            this.appDef = AppUtil.getCurrentAppDefinition();
+            createSheet();
+        }
+
+        private void createSheet() {
+            sheetNumber++;
+            sheet = workbook.createSheet(sheetNumber == 1 ? "Report" : "Report " + sheetNumber);
+            imageSupport = "true".equals(exportImages) ? new StreamingImageSupport(workbook, sheet, appDef) : null;
+            rowNumber = 0;
+
+            if (includeHeaderDecorator) {
+                Row titleRow = sheet.createRow(rowNumber++);
+                Cell titleCell = titleRow.createCell(0);
+                titleCell.setCellValue(headerDecorator);
+                int lineCount = headerDecorator.split("\\r\\n|\\r|\\n").length;
+                titleRow.setHeightInPoints(lineCount * sheet.getDefaultRowHeightInPoints());
+                if (headers.length >= 2) {
+                    sheet.addMergedRegion(new CellRangeAddress(titleRow.getRowNum(), titleRow.getRowNum(), 0, headers.length - 1));
+                }
+            }
+
+            Row headerRow = sheet.createRow(rowNumber++);
+            for (int i = 0; i < headers.length; i++) {
+                headerRow.createCell(i).setCellValue(headers[i]);
+            }
+        }
+
+        private void appendRow(DataListCollection sourceRows, int sourceIndex) {
+            if (rowNumber >= XLSX_MAX_ROWS_PER_SHEET) {
+                // XLSX worksheets are limited to 1,048,576 rows. Continue in a
+                // new sheet and repeat the configured/header rows.
+                createSheet();
+            }
+
+            Row excelRow = sheet.createRow(rowNumber);
+            Object sourceRow = getRow(sourceRows, sourceIndex);
+            int columnNumber = 0;
+            for (DataListColumn column : columns) {
+                String value = getStreamingFormattedValue(dataList, sourceRow, column, exportImages, exportEncrypt);
+                if (value.startsWith("IMAGE:") || value.startsWith("FILE:")) {
+                    // Image data is still retained by POI at workbook scope;
+                    // this feature requires separate high-volume testing.
+                    imageSupport.append(excelRow, rowNumber, sourceRow, value, columnNumber++);
+                } else {
+                    Cell cell = excelRow.createCell(columnNumber++);
+                    if (numericColumns.contains(column.getName())
+                            && NumberUtils.isParsable(value)) {
+                        cell.setCellStyle(numericStyle);
+                        cell.setCellValue(Double.parseDouble(value));
+                    } else {
+                        cell.setCellValue(value);
+                    }
+                }
+            }
+            rowNumber++;
+            exportedRowCount++;
+        }
+
+        private long getExportedRowCount() {
+            return exportedRowCount;
+        }
+
+        private void appendFooter(String footerHeader, String footerDecorator, String includeCustomFooter) {
+            int footerRows = (getFooter(footerHeader) ? 1 : 0) + (includeCustomFooter(includeCustomFooter) ? 1 : 0);
+            if (footerRows > 0 && rowNumber + footerRows > XLSX_MAX_ROWS_PER_SHEET) {
+                createSheet();
+            }
+            if (getFooter(footerHeader)) {
+                Row footerHeaderRow = sheet.createRow(rowNumber++);
+                for (int i = 0; i < headers.length; i++) {
+                    footerHeaderRow.createCell(i).setCellValue(headers[i]);
+                }
+            }
+            if (includeCustomFooter(includeCustomFooter)) {
+                Row footerRow = sheet.createRow(rowNumber++);
+                footerRow.createCell(0).setCellValue(footerDecorator);
+                if (headers.length >= 2) {
+                    sheet.addMergedRegion(new CellRangeAddress(footerRow.getRowNum(), footerRow.getRowNum(), 0, headers.length - 1));
+                }
+            }
+        }
+    }
+
+    /**
+     * Reuses services, Tika, POI helpers and the drawing patriarch instead of
+     * recreating them for every image cell as the legacy method does.
+     */
+    private static final class StreamingImageSupport {
+        private final Workbook workbook;
+        private final Sheet sheet;
+        private final AppDefinition appDef;
+        private final AppService appService;
+        private final Tika tika = new Tika();
+        private final CreationHelper creationHelper;
+        private final Drawing<?> drawing;
+        private final Map<String, String> tableNames = new HashMap<>();
+
+        private StreamingImageSupport(Workbook workbook, Sheet sheet, AppDefinition appDef) {
+            this.workbook = workbook;
+            this.sheet = sheet;
+            this.appDef = appDef;
+            ApplicationContext context = AppUtil.getApplicationContext();
+            this.appService = (AppService) context.getBean("appService");
+            this.creationHelper = workbook.getCreationHelper();
+            this.drawing = sheet.createDrawingPatriarch();
+        }
+
+        private void append(Row excelRow, int rowNumber, Object sourceRow, String encodedValue, int columnNumber) {
+            excelRow.createCell(columnNumber);
+            try {
+                String[] pieces;
+                String formDefId;
+                String fileName;
+                boolean knownImage;
+                if (encodedValue.startsWith("IMAGE:")) {
+                    pieces = encodedValue.split(":", 4);
+                    if (pieces.length < 4) {
+                        return;
+                    }
+                    formDefId = pieces[1];
+                    fileName = pieces[3];
+                    knownImage = true;
+                } else {
+                    pieces = encodedValue.split(":", 3);
+                    if (pieces.length < 3) {
+                        return;
+                    }
+                    formDefId = pieces[1];
+                    fileName = pieces[2];
+                    knownImage = false;
+                }
+
+                String tableName = tableNames.get(formDefId);
+                if (tableName == null) {
+                    tableName = appService.getFormTableName(appDef, formDefId);
+                    tableNames.put(formDefId, tableName);
+                }
+                File file = FileUtil.getFile(fileName, tableName, findRowKey(sourceRow));
+                if (file == null || !file.exists()) {
+                    return;
+                }
+                String mimeType = knownImage ? "image/known" : tika.detect(file);
+                if (mimeType == null || !mimeType.startsWith("image/")) {
+                    return;
+                }
+
+                byte[] imageBytes = Files.readAllBytes(file.toPath());
+                int pictureIndex = workbook.addPicture(imageBytes, getPictureType(fileName));
+                ClientAnchor anchor = creationHelper.createClientAnchor();
+                sheet.setColumnWidth(columnNumber, 1500);
+                excelRow.setHeightInPoints(40);
+                anchor.setCol1(columnNumber);
+                anchor.setRow1(rowNumber);
+                anchor.setCol2(columnNumber + 1);
+                anchor.setRow2(rowNumber + 1);
+                drawing.createPicture(anchor, pictureIndex).resize(1.0, 1.0);
+            } catch (IOException ex) {
+                LogUtil.error(getClassName(), ex, ex.getMessage());
+            }
+        }
+    }
+
+    private static String findRowKey(Object row) {
+        Object idValue = null;
+        if (row instanceof Map) {
+            idValue = ((Map) row).get("id");
+        } else if (row instanceof FormRow) {
+            idValue = ((FormRow) row).get("id");
+        }
+        return idValue != null ? idValue.toString() : null;
+    }
+
+    private static List<DataListColumn> getExportColumns(DataList dataList) {
+        List<DataListColumn> exportColumns = new ArrayList<>();
+        for (DataListColumn column : dataList.getColumns()) {
+            String excludeExport = column.getPropertyString("exclude_export");
+            String includeExport = column.getPropertyString("include_export");
+            boolean hidden = column.isHidden();
+            if ((hidden && "true".equalsIgnoreCase(includeExport))
+                    || (!hidden && !"true".equalsIgnoreCase(excludeExport))) {
+                exportColumns.add(column);
+            }
+        }
+        return exportColumns;
+    }
+
+    private static Set<String> getNumericColumns(String exportNumeric, Object[] gridColumns) {
+        if (!"true".equals(exportNumeric) || gridColumns == null) {
+            return Collections.emptySet();
+        }
+        Set<String> numericColumns = new HashSet<>();
+        for (Object gridColumn : gridColumns) {
+            if (gridColumn instanceof Map) {
+                Object field = ((Map) gridColumn).get("field");
+                if (field != null) {
+                    numericColumns.add(field.toString());
+                }
+            }
+        }
+        return numericColumns;
+    }
+
+    private static String getStreamingFormattedValue(DataList dataList, Object row, DataListColumn column, String exportImages, String exportEncrypt) {
+        String name = column.getName();
+        try {
+            Object valueObj = null;
+            if (column instanceof DataListDisplayColumnProxy) {
+                Object displayColumn = ((DataListDisplayColumnProxy) column)
+                        .getDisplayColumn();
+                if (displayColumn instanceof BeanShellColumn) {
+                    valueObj = ((BeanShellColumn) displayColumn)
+                            .getRowValue(row, 0);
+                }
+            }
+            if (valueObj == null) {
+                valueObj = DataListService.evaluateColumnValueFromRow(row, name);
+            }
+            String value = valueObj != null ? valueObj.toString() : "";
+            Collection<DataListColumnFormat> formats = column.getFormats();
+
+            if ("true".equals(exportImages)
+                    && formats != null && !formats.isEmpty()) {
+                DataListColumnFormat firstFormat = formats.iterator().next();
+                if (firstFormat != null) {
+                    String formatterClassName = firstFormat.getClassName();
+                    String formDefId = (String) firstFormat.getProperty("formDefId");
+                    if ("org.joget.apps.datalist.lib.ImageFormatter"
+                            .equals(formatterClassName)) {
+                        String imageSrc = (String) firstFormat.getProperty("imageSrc");
+                        if ("form".equals(imageSrc) && !value.isEmpty()) {
+                            return "IMAGE:" + formDefId + ":" + imageSrc
+                                    + ":" + value;
+                        }
+                    } else if ("org.joget.tutorial.FileLinkDatalistFormatter"
+                            .equals(formatterClassName)
+                            && formDefId != null && !formDefId.isEmpty()
+                            && !value.isEmpty()) {
+                        return "FILE:" + formDefId + ":" + value;
+                    }
+                }
+            }
+
+            if (!"true".equals(exportEncrypt)) {
+                value = SecurityUtil.decrypt(value);
+            }
+            // Preserve legacy behavior: only the first non-null formatter is
+            // applied before returning the exported value.
+            if (formats != null) {
+                for (DataListColumnFormat format : formats) {
+                    if (format != null) {
+                        value = format.format(dataList, column, row, value);
+                        break;
+                    }
+                }
+            }
+            return value == null ? ""
+                    : HTML_TAG_PATTERN.matcher(value).replaceAll("");
+        } catch (Exception ex) {
+            LogUtil.error(getClassName(), ex, "Error processing column : " + name);
+            return "";
+        }
+    }
+
+    /**
+     * Legacy in-memory implementation retained for reference and backwards
+     * compatibility. New plugin call sites use generateStreamingExcelFile().
+     */
     public static Workbook getExcel(DataList dataList, DataListCollection rows, String[] rowKeys, boolean background, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) {
         HashMap<String, StringBuilder> sb = getLabelAndKey(dataList);
         StringBuilder keySB = sb.get("key");

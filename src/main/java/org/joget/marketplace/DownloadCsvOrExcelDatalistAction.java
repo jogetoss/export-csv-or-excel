@@ -1,7 +1,5 @@
 package org.joget.marketplace;
 
-import org.apache.commons.lang.ArrayUtils;
-import org.apache.poi.ss.usermodel.Workbook;
 import org.joget.apps.app.service.AppPluginUtil;
 import org.joget.apps.app.service.AppUtil;
 import org.joget.apps.datalist.model.DataList;
@@ -17,11 +15,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.commons.util.PluginThread;
@@ -142,16 +136,24 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                 boolean storeToForm = "true".equalsIgnoreCase(getPropertyString("storeToForm"));
 
                 if (getDownloadAs()) {
-                    DataListCollection dataListRows = getDataListRows(dataList, rowKeys, false);
-
-                    // Check if storeToForm is enabled; skip download if true
-                    if (!storeToForm) {
-                        DownloadCsvOrExcelUtil.downloadCSV(request, response, dataList, dataListRows, rowKeys, renameFile, fileName, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
-                    }
-
-                    // Store CSV to form if enabled (separate from download)
-                    if (storeToForm) {
-                        DownloadCsvOrExcelUtil.storeCSVToForm(request, dataList, dataListRows, rowKeys, renameFile, fileName, formDefId, fileFieldId, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
+                    /*
+                     * The original downloadCSV/storeCSVToForm methods remain
+                     * available in the utility class. This new path pages the
+                     * data and writes through a buffered temporary file.
+                     */
+                    DataListCollection selectedRows = getSelectedRowsForExport(dataList, rowKeys);
+                    String csvFileName = renameFile.equalsIgnoreCase("true") ? fileName + ".csv" : "report.csv";
+                    File tempFolder = new File(FileManager.getBaseDirectory(), UuidGenerator.getInstance().getUuid());
+                    File csvFile = new File(tempFolder, csvFileName);
+                    try {
+                        DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, csvFile, false, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
+                        if (storeToForm) {
+                            DownloadCsvOrExcelUtil.storeGeneratedFileToForm(csvFile, formDefId, fileFieldId);
+                        } else {
+                            DownloadCsvOrExcelUtil.streamCSVFileToResponse(response, csvFile, csvFileName);
+                        }
+                    } finally {
+                        deleteTemporaryExport(csvFile, tempFolder);
                     }
                 } else {
                     String downloadBackgroud = getPropertyString("downloadBackgroud");
@@ -169,26 +171,25 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                             public void run() {
                                 AppUtil.setCurrentAppDefinition(appDef);
                                 dataList.setUseSession(false);
-                                DataListCollection rows = getDataListRows(dataList, rowKeys, true);
-                                //DataListCollection rows = dataList.getRows(50000000, null);
-                                Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
-                                String filePath = excelFolder.getPath() + File.separator + excelFileName;
-
+                                File excelFile = new File(excelFolder, excelFileName);
                                 try {
-                                    try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
-                                        workbook.write(fileOut);
-                                    } catch (IOException e) {
-                                        LogUtil.error(getClassName(), e, e.getMessage());
-                                    }
+                                    /*
+                                     * Previous implementation (preserved in
+                                     * DownloadCsvOrExcelUtil#getExcel) loaded
+                                     * up to 50,000,000 rows and the full
+                                     * XSSFWorkbook in heap. The new method
+                                     * fetches all-row exports in batches and
+                                     * uses SXSSFWorkbook temporary files.
+                                     */
+                                    DataListCollection selectedRows = getSelectedRowsForExport(dataList, rowKeys);
+                                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
 
                                     if (storeToForm) {
-                                        new File(filePath + ".completed").createNewFile();
-                                        DownloadCsvOrExcelUtil.storeExcelToForm(workbook, excelFileName, renameFile, formDefId, fileFieldId);
+                                        // Reuse the completed disk file. The
+                                        // workbook is not generated a second time.
+                                        DownloadCsvOrExcelUtil.storeGeneratedFileToForm(excelFile, formDefId, fileFieldId);
                                     }
-
-                                    if (!storeToForm) {
-                                        new File(filePath + ".completed").createNewFile();
-                                    }
+                                    new File(excelFile.getPath() + ".completed").createNewFile();
 
                                 } catch (Exception e) {
                                     LogUtil.error(getClassName(), e, "Failed in file creation process");
@@ -207,22 +208,24 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         result.setUrl(url);
 
                     } else {
-                        // not in the backgroud, get the rows
-                        DataListCollection rows = getDataListRows(dataList, rowKeys, false);
-
-                        if (storeToForm) {
-                            Workbook workbook = DownloadCsvOrExcelUtil.getExcel(dataList, rows, rowKeys, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
-                            DownloadCsvOrExcelUtil.storeExcelToForm(workbook, getPropertyString("filename") + ".xlsx", renameFile, formDefId, fileFieldId);
-
-                        }
-
-                        if (!storeToForm) {
-                            DownloadCsvOrExcelUtil.downloadExcel(request, response, dataList, rows, rowKeys, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, renameFile,  fileName, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
+                        // Foreground and store-to-form modes use the same
+                        // temporary XLSX file, avoiding an in-memory byte copy.
+                        DataListCollection selectedRows = getSelectedRowsForExport(dataList, rowKeys);
+                        String excelFileName = renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
+                        File tempFolder = new File(FileManager.getBaseDirectory(), UuidGenerator.getInstance().getUuid());
+                        File excelFile = new File(tempFolder, excelFileName);
+                        try {
+                            DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
+                            if (storeToForm) {
+                                DownloadCsvOrExcelUtil.storeGeneratedFileToForm(excelFile, formDefId, fileFieldId);
+                            } else {
+                                DownloadCsvOrExcelUtil.streamExcelFileToResponse(response, excelFile, excelFileName);
+                            }
+                        } finally {
+                            deleteTemporaryExport(excelFile, tempFolder);
                         }
                     }
                 }
-            } catch (ServletException e) {
-                LogUtil.error(getClassName(), e, "Fail to generate Excel or CSV for " + ArrayUtils.toString(rowKeys));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -237,12 +240,35 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             dataListRows = dataList.getRows();
         } else {
             if (background) {
+                // Legacy all-row behavior retained for reference only. Active
+                // streaming call sites never invoke this branch for all rows.
                 dataListRows = dataList.getRows(50000000, null);
             } else {
                 dataListRows = dataList.getRows(0, 0);
             }
         }
         return dataListRows;
+    }
+
+    /**
+     * Selected rows retain the legacy filtering behavior. For an all-row
+     * export this deliberately returns null; the streaming writer will fetch
+     * the datalist in DATA_BATCH_SIZE pages instead of one large collection.
+     */
+    private DataListCollection getSelectedRowsForExport(DataList dataList, String[] rowKeys) {
+        if (rowKeys == null || rowKeys.length == 0) {
+            return null;
+        }
+        return getDataListRows(dataList, rowKeys, false);
+    }
+
+    private void deleteTemporaryExport(File excelFile, File tempFolder) {
+        if (excelFile.exists() && !excelFile.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete temporary export file: " + excelFile);
+        }
+        if (tempFolder.isDirectory() && !tempFolder.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete temporary export folder: " + tempFolder);
+        }
     }
 
     public void addDataListFilter(DataList dataList, String[] rowKeys) {
@@ -293,19 +319,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                     if (fileGenerated && "stored".equalsIgnoreCase(status)) {
                         File file = new File(path);
-                        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                        response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
-                        OutputStream outputStream;
-                        try (InputStream inputStream = new FileInputStream(file)) {
-                            outputStream = response.getOutputStream();
-                            byte[] buffer = new byte[4096];
-                            int bytesRead;
-                            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                                outputStream.write(buffer, 0, bytesRead);
-                                outputStream.flush();
-                            }
-                        }
-                        outputStream.close();
+                        DownloadCsvOrExcelUtil.streamExcelFileToResponse(response, file, file.getName());
+                        deleteCompletedBackgroundExport(file);
 
                     } else if (fileGenerated) {
 
@@ -358,19 +373,8 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                 } else if (fileGenerated && "generated".equalsIgnoreCase(status)) {
                     File file = new File(path);
-                    response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                    response.setHeader("Content-Disposition", "attachment; filename=" + file.getName() + "");
-                    OutputStream outputStream;
-                    try (InputStream inputStream = new FileInputStream(file)) {
-                        outputStream = response.getOutputStream();
-                        byte[] buffer = new byte[4096];
-                        int bytesRead;
-                        while ((bytesRead = inputStream.read(buffer)) != -1) {
-                            outputStream.write(buffer, 0, bytesRead);
-                            outputStream.flush();
-                        }
-                    }
-                    outputStream.close();
+                    DownloadCsvOrExcelUtil.streamExcelFileToResponse(response, file, file.getName());
+                    deleteCompletedBackgroundExport(file);
 
                 } else if (fileGenerated) {
 
@@ -421,6 +425,21 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
 
                 }
             }
+        }
+    }
+
+    /** Remove the completed background artifact after a successful download. */
+    private void deleteCompletedBackgroundExport(File excelFile) {
+        File completionFlag = new File(excelFile.getPath() + ".completed");
+        File exportFolder = excelFile.getParentFile();
+        if (excelFile.exists() && !excelFile.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete completed export file: " + excelFile);
+        }
+        if (completionFlag.exists() && !completionFlag.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete completion flag: " + completionFlag);
+        }
+        if (exportFolder != null && exportFolder.isDirectory() && !exportFolder.delete()) {
+            LogUtil.warn(getClassName(), "Unable to delete completed export folder: " + exportFolder);
         }
     }
 }
