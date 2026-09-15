@@ -21,6 +21,7 @@ import org.joget.apps.app.model.AppDefinition;
 import org.joget.commons.util.PluginThread;
 import org.joget.commons.util.UuidGenerator;
 import org.joget.marketplace.util.DownloadCsvOrExcelUtil;
+import org.joget.marketplace.util.BackgroundExportStatus;
 import org.joget.plugin.base.PluginWebSupport;
 
 public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault implements PluginWebSupport {
@@ -108,6 +109,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         String renameFile = getPropertyString("renameFile");
         String fileName = getPropertyString("filename");
         String delimiter = getPropertyString("delimiter");
+        final int batchSize = DownloadCsvOrExcelUtil.getDataBatchSize(getPropertyString("dataBatchSize"));
         String headerDecorator = getPropertyString("headerDecorator");
         String downloadAllWhenNoneSelected = getPropertyString("downloadAllWhenNoneSelected");
         String footerDecorator = getPropertyString("footerDecorator");
@@ -146,7 +148,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                     File tempFolder = new File(FileManager.getBaseDirectory(), UuidGenerator.getInstance().getUuid());
                     File csvFile = new File(tempFolder, csvFileName);
                     try {
-                        DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, csvFile, false, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt);
+                        DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, csvFile, false, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt, batchSize);
                         if (storeToForm) {
                             DownloadCsvOrExcelUtil.storeGeneratedFileToForm(csvFile, formDefId, fileFieldId);
                         } else {
@@ -165,14 +167,17 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                             //create directories if not exist
                             new File(FileManager.getBaseDirectory(), uniqueId).mkdirs();
                         }
+                        final BackgroundExportStatus progress = new BackgroundExportStatus(excelFolder, storeToForm);
+                        progress.update("preparing", 0, 0);
                         AppDefinition appDef = AppUtil.getCurrentAppDefinition();
 
                         Thread excelDownloadThread = new PluginThread(new Runnable() {
                             public void run() {
-                                AppUtil.setCurrentAppDefinition(appDef);
-                                dataList.setUseSession(false);
+
                                 File excelFile = new File(excelFolder, excelFileName);
                                 try {
+                                    AppUtil.setCurrentAppDefinition(appDef);
+                                    dataList.setUseSession(false);
                                     /*
                                      * Previous implementation (preserved in
                                      * DownloadCsvOrExcelUtil#getExcel) loaded
@@ -182,17 +187,20 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                                      * uses SXSSFWorkbook temporary files.
                                      */
                                     DataListCollection selectedRows = getSelectedRowsForExport(dataList, rowKeys);
-                                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
+                                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, batchSize, progress::update);
 
                                     if (storeToForm) {
-                                        // Reuse the completed disk file. The
-                                        // workbook is not generated a second time.
-                                        DownloadCsvOrExcelUtil.storeGeneratedFileToForm(excelFile, formDefId, fileFieldId);
+                                        progress.stage("storing");
+                                        DownloadCsvOrExcelUtil.storeGeneratedFileToFormChecked(excelFile, formDefId, fileFieldId);
                                     }
                                     new File(excelFile.getPath() + ".completed").createNewFile();
+                                    progress.stage("ready");
 
                                 } catch (Exception e) {
                                     LogUtil.error(getClassName(), e, "Failed in file creation process");
+                                    try { progress.stage("failed"); } catch (IOException statusError) {
+                                        LogUtil.error(getClassName(), statusError, "Unable to record export failure");
+                                    }
                                 }
                             }
                         });
@@ -215,7 +223,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         File tempFolder = new File(FileManager.getBaseDirectory(), UuidGenerator.getInstance().getUuid());
                         File excelFile = new File(tempFolder, excelFileName);
                         try {
-                            DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn);
+                            DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, batchSize);
                             if (storeToForm) {
                                 DownloadCsvOrExcelUtil.storeGeneratedFileToForm(excelFile, formDefId, fileFieldId);
                             } else {
@@ -253,7 +261,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
     /**
      * Selected rows retain the legacy filtering behavior. For an all-row
      * export this deliberately returns null; the streaming writer will fetch
-     * the datalist in DATA_BATCH_SIZE pages instead of one large collection.
+     * the datalist in configured-size batches instead of one large collection.
      */
     private DataListCollection getSelectedRowsForExport(DataList dataList, String[] rowKeys) {
         if (rowKeys == null || rowKeys.length == 0) {
@@ -297,141 +305,51 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
             return;
         }
 
+        response.setHeader("Cache-Control", "no-store");
         String uniqueId = request.getParameter("uniqueId");
-        String filename = request.getParameter("filename");
-        try {
-            filename = java.net.URLDecoder.decode(filename, "UTF-8");
-        } catch (Exception e) {
-            LogUtil.error(getClassName(), e, "Failed to decode filename");
+        String filename = request.getParameter("filename"); // Servlet parameters are already URL-decoded.
+        if (uniqueId == null || !uniqueId.matches("[A-Za-z0-9-]+")
+                || filename == null || filename.isEmpty() || filename.contains("/") || filename.contains("\\")) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+        File folder = new File(FileManager.getBaseDirectory(), uniqueId);
+        File file = new File(folder, filename);
+        if (!file.getCanonicalFile().getParentFile().equals(folder.getCanonicalFile()) || !folder.isDirectory()) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
         }
         String status = request.getParameter("status");
-        boolean storeToForm = Boolean.parseBoolean(request.getParameter("storeToForm"));  // Assuming this parameter exists
-        boolean downloadBackground = Boolean.parseBoolean(request.getParameter("downloadBackgroud"));  // Assuming this parameter exists
-
-        if (uniqueId != null && !uniqueId.isEmpty()) {
-            if (filename != null && !filename.isEmpty()) {
-                // check for the flag file
-                String path = FileManager.getBaseDirectory() + File.separator + uniqueId + File.separator + filename;
-                boolean fileGenerated = DownloadCsvOrExcelUtil.checkCompletionFlag(path);
-
-                // Check if both storeToForm and downloadBackground are true
-                if (storeToForm && downloadBackground) {
-
-                    if (fileGenerated && "stored".equalsIgnoreCase(status)) {
-                        File file = new File(path);
-                        DownloadCsvOrExcelUtil.streamExcelFileToResponse(response, file, file.getName());
-                        deleteCompletedBackgroundExport(file);
-
-                    } else if (fileGenerated) {
-
-                        //datalist.downloadCSVOrExcel.downloadCompleteMessage
-                        String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessageStoretoform", getClassName(), MESSAGE_PATH);
-                        String flagParam = "status=generated"; // Replace with your desired parameter and value
-                        String currentURL = request.getRequestURL().toString();
-
-                        if (request.getQueryString() != null) {
-                            currentURL += "?" + request.getQueryString() + "&" + flagParam;
-                        } else {
-                            currentURL += "?" + flagParam;
-                        }
-
-                        String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
-                                + "<script>\n"
-                                + "  setTimeout(function() {\n"
-                                + "    location.href = '" + currentURL + "';\n"
-                                + "  }, 3000); // Redirect after 3 seconds\n"
-                                + "</script>";
-
-                        response.setContentType("text/html");
-                        response.setCharacterEncoding("UTF-8");
-                        try {
-                            response.getWriter().write(javascript);
-                            response.flushBuffer();
-                        } catch (IOException ex) {
-                            LogUtil.error(getClassName(), ex, ex.getMessage());
-                        }
-
-                    } else {
-                        String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                        String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h2>" + message + "</h2></marquee>"
-                                + "<script>\n"
-                                + "  setTimeout(function() {\n"
-                                + "    location.reload();\n"
-                                + "  }, 10000); // Reload after 10 seconds\n"
-                                + "</script>";
-
-                        response.setContentType("text/html");
-                        response.setCharacterEncoding("UTF-8");
-                        try {
-                            response.getWriter().write(javascript);
-                            response.flushBuffer();
-                        } catch (IOException ex) {
-                            LogUtil.error(getClassName(), ex, ex.getMessage());
-                        }
-
-                    }
-
-                } else if (fileGenerated && "generated".equalsIgnoreCase(status)) {
-                    File file = new File(path);
-                    DownloadCsvOrExcelUtil.streamExcelFileToResponse(response, file, file.getName());
-                    deleteCompletedBackgroundExport(file);
-
-                } else if (fileGenerated) {
-
-                    //datalist.downloadCSVOrExcel.downloadCompleteMessage
-                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.downloadCompleteMessage", getClassName(), MESSAGE_PATH);
-                    String flagParam = "status=generated"; // Replace with your desired parameter and value
-                    String currentURL = request.getRequestURL().toString();
-
-                    if (request.getQueryString() != null) {
-                        currentURL += "?" + request.getQueryString() + "&" + flagParam;
-                    } else {
-                        currentURL += "?" + flagParam;
-                    }
-
-                    String javascript = "<div style='text-align:center;'><h2>" + message + "</h2></div>"
-                            + "<script>\n"
-                            + "  setTimeout(function() {\n"
-                            + "    location.href = '" + currentURL + "';\n"
-                            + "  }, 3000); // Redirect after 3 seconds\n"
-                            + "</script>";
-
-                    response.setContentType("text/html");
-                    response.setCharacterEncoding("UTF-8");
-                    try {
-                        response.getWriter().write(javascript);
-                        response.flushBuffer();
-                    } catch (IOException ex) {
-                        LogUtil.error(getClassName(), ex, ex.getMessage());
-                    }
-
-                } else {
-                    String message = AppPluginUtil.getMessage("datalist.downloadCSVOrExcel.backgroundMessage", getClassName(), MESSAGE_PATH);
-                    String javascript = "<marquee width=\"60%\" direction=\"left\" height=\"100px\"><h2>" + message + "</h2></marquee>"
-                            + "<script>\n"
-                            + "  setTimeout(function() {\n"
-                            + "    location.reload();\n"
-                            + "  }, 10000); // Reload after 10 seconds\n"
-                            + "</script>";
-
-                    response.setContentType("text/html");
-                    response.setCharacterEncoding("UTF-8");
-                    try {
-                        response.getWriter().write(javascript);
-                        response.flushBuffer();
-                    } catch (IOException ex) {
-                        LogUtil.error(getClassName(), ex, ex.getMessage());
-                    }
-
-                }
+        if ("progress".equals(status)) {
+            response.setContentType("application/json");
+            response.setCharacterEncoding("UTF-8");
+            response.getWriter().write(BackgroundExportStatus.readJson(folder, file));
+        } else if ("generated".equals(status) || "stored".equals(status)) {
+            if (!DownloadCsvOrExcelUtil.checkCompletionFlag(file.getPath()) || !file.isFile()) {
+                response.sendError(HttpServletResponse.SC_CONFLICT);
+                return;
+            }
+            DownloadCsvOrExcelUtil.streamExcelFileToResponse(response, file, filename);
+            deleteCompletedBackgroundExport(file);
+        } else {
+            response.setContentType("text/html");
+            response.setCharacterEncoding("UTF-8");
+            try (java.io.InputStream in = getClass().getResourceAsStream("/templates/background-export.html")) {
+                if (in == null) { throw new IOException("Missing background export template"); }
+                java.io.ByteArrayOutputStream page = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = in.read(buffer)) != -1) { page.write(buffer, 0, count); }
+                response.getWriter().write(page.toString("UTF-8"));
             }
         }
     }
 
     /** Remove the completed background artifact after a successful download. */
-    private void deleteCompletedBackgroundExport(File excelFile) {
+    private void deleteCompletedBackgroundExport(File excelFile) throws IOException {
         File completionFlag = new File(excelFile.getPath() + ".completed");
         File exportFolder = excelFile.getParentFile();
+        java.nio.file.Files.deleteIfExists(new File(exportFolder, "progress.properties").toPath());
         if (excelFile.exists() && !excelFile.delete()) {
             LogUtil.warn(getClassName(), "Unable to delete completed export file: " + excelFile);
         }

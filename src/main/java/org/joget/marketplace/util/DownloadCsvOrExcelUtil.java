@@ -72,13 +72,29 @@ public class DownloadCsvOrExcelUtil {
     /*
      * Streaming export settings.
      *
-     * DATA_BATCH_SIZE controls how many records are fetched from the datalist
+     * DATA_BATCH_SIZE is the default number of records fetched from the datalist
      * binder at one time. SXSSF_ROW_WINDOW controls how many Excel rows Apache
      * POI retains in heap before flushing older rows to its temporary files.
      * These deliberately remain separate so they can be tuned independently
      * after the one-million-row performance test.
      */
     public static final int DATA_BATCH_SIZE = 2000;
+
+    /** Uses the default for existing configurations and invalid input. */
+    public static int getDataBatchSize(String value) {
+        if (value != null) {
+            try {
+                int batchSize = Integer.parseInt(value.trim());
+                if (batchSize > 0) {
+                    return batchSize;
+                }
+            } catch (NumberFormatException e) {
+                // Fall back for non-integer values or integer overflow.
+            }
+        }
+        return DATA_BATCH_SIZE;
+    }
+
     public static final int SXSSF_ROW_WINDOW = 100;
     private static final int XLSX_MAX_ROWS_PER_SHEET = 1048576;
     private static final int FILE_COPY_BUFFER_SIZE = 64 * 1024;
@@ -164,24 +180,29 @@ public class DownloadCsvOrExcelUtil {
 
     protected static void storeGeneratedFile(File generatedFile, String formDefId, String fileFieldId) {
         try {
-            AppService appService = (AppService) FormUtil.getApplicationContext().getBean("appService");
-            AppDefinition appDef = AppUtil.getCurrentAppDefinition();
-
-            String recordId = UuidGenerator.getInstance().getUuid();
-            String tableName = appService.getFormTableName(appDef, formDefId);
-
-            FileUtil.storeFile(generatedFile, tableName, recordId);
-
-            FormRowSet rows = new FormRowSet();
-            FormRow row = new FormRow();
-            row.setId(recordId);
-            row.put(fileFieldId, generatedFile.getName());
-            rows.add(row);
-
-            appService.storeFormData(formDefId, tableName, rows, recordId);
+            storeGeneratedFileToFormChecked(generatedFile, formDefId, fileFieldId);
         } catch (Exception e) {
             LogUtil.error(getClassName(), e, "Failed to store the generated file in the form.");
         }
+    }
+
+    /** Background jobs must report storage failures instead of marking them complete. */
+    public static void storeGeneratedFileToFormChecked(File generatedFile, String formDefId, String fileFieldId) throws Exception {
+        AppService appService = (AppService) FormUtil.getApplicationContext().getBean("appService");
+        AppDefinition appDef = AppUtil.getCurrentAppDefinition();
+
+        String recordId = UuidGenerator.getInstance().getUuid();
+        String tableName = appService.getFormTableName(appDef, formDefId);
+
+        FileUtil.storeFile(generatedFile, tableName, recordId);
+
+        FormRowSet rows = new FormRowSet();
+        FormRow row = new FormRow();
+        row.setId(recordId);
+        row.put(fileFieldId, generatedFile.getName());
+        rows.add(row);
+
+        appService.storeFormData(formDefId, tableName, rows, recordId);
     }
 
     public static File generateCSVFile(DataList dataList, DataListCollection dataListRows, String[] rowKeys, String renameFile, String fileName, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) throws Exception {
@@ -341,6 +362,11 @@ public class DownloadCsvOrExcelUtil {
      * method is preserved above, but it builds the full CSV in a StringWriter.
      */
     public static File generateStreamingCSVFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt) throws IOException {
+        return generateStreamingCSVFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt, DATA_BATCH_SIZE);
+    }
+
+    public static File generateStreamingCSVFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String delimiter, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportEncrypt, int batchSize) throws IOException {
+        batchSize = batchSize > 0 ? batchSize : DATA_BATCH_SIZE;
         long exportStartedAt = System.currentTimeMillis();
         int totalRows = getExpectedExportRows(dataList, selectedRows, rowKeys, downloadAllWhenNoneSelected);
         File outputFile = makeUnique ? getUniqueFile(requestedFile.getPath()) : requestedFile;
@@ -349,7 +375,7 @@ public class DownloadCsvOrExcelUtil {
             throw new IOException("Unable to create export directory: " + parent);
         }
         String actualDelimiter = delimiter == null || delimiter.isEmpty() ? "," : delimiter;
-        LogUtil.info(getClassName(), getExportStartMessage("CSV", totalRows, outputFile));
+        LogUtil.info(getClassName(), getExportStartMessage("CSV", totalRows, outputFile, batchSize));
 
         boolean completed = false;
         long processedRows = 0;
@@ -376,7 +402,7 @@ public class DownloadCsvOrExcelUtil {
                 int start = 0;
                 int batchNumber = 0;
                 while (true) {
-                    DataListCollection batch = dataList.getRows(DATA_BATCH_SIZE, start);
+                    DataListCollection batch = dataList.getRows(batchSize, start);
                     if (batch == null || batch.isEmpty()) {
                         break;
                     }
@@ -388,7 +414,7 @@ public class DownloadCsvOrExcelUtil {
                     processedRows += fetched;
                     start += fetched;
                     logExportBatch("CSV", batchNumber, fetched, processedRows, totalRows, exportStartedAt);
-                    if (fetched < DATA_BATCH_SIZE) {
+                    if (fetched < batchSize) {
                         break;
                     }
                 }
@@ -485,6 +511,19 @@ public class DownloadCsvOrExcelUtil {
      *                     caller already supplied a unique background-job path
      */
     public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) throws IOException {
+        return generateStreamingExcelFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns, DATA_BATCH_SIZE);
+    }
+
+    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, int batchSize) throws IOException {
+        return generateStreamingExcelFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns, batchSize, (stage, processed, total) -> {});
+    }
+
+    public interface ExportProgressListener {
+        void update(String stage, long processed, int total) throws IOException;
+    }
+
+    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, int batchSize, ExportProgressListener progress) throws IOException {
+        batchSize = batchSize > 0 ? batchSize : DATA_BATCH_SIZE;
 
         long exportStartedAt = System.currentTimeMillis();
         int totalRows = getExpectedExportRows(dataList, selectedRows, rowKeys, downloadAllWhenNoneSelected);
@@ -497,11 +536,12 @@ public class DownloadCsvOrExcelUtil {
         SXSSFWorkbook workbook = new SXSSFWorkbook(SXSSF_ROW_WINDOW);
         // Compress POI's XML temporary files to reduce disk usage for 1M+ rows.
         workbook.setCompressTempFiles(true);
-        LogUtil.info(getClassName(), getExportStartMessage("Excel", totalRows, outputFile));
+        LogUtil.info(getClassName(), getExportStartMessage("Excel", totalRows, outputFile, batchSize));
 
         boolean completed = false;
         long processedRows = 0;
         try {
+            progress.update("exporting", 0, totalRows);
             StreamingExcelContext context = new StreamingExcelContext(workbook, dataList, headerDecorator, includeCustomHeader, exportImages, exportEncrypt, exportNumeric, gridColumns);
 
             if (rowKeys != null && rowKeys.length > 0) {
@@ -512,10 +552,11 @@ public class DownloadCsvOrExcelUtil {
                 processedRows = context.getExportedRowCount();
                 logExportBatch("Excel", 1, selectedRows != null ? selectedRows.size() : 0, processedRows, totalRows, exportStartedAt);
             } else if ("true".equals(downloadAllWhenNoneSelected)) {
-                appendAllRowsInBatches(context, dataList, totalRows, exportStartedAt);
+                appendAllRowsInBatches(context, dataList, totalRows, exportStartedAt, batchSize, progress);
                 processedRows = context.getExportedRowCount();
             }
 
+            progress.update("finalizing", processedRows, totalRows);
             context.appendFooter(footerHeader, footerDecorator, includeCustomFooter);
 
             // SXSSFWorkbook has already flushed old rows to disk. This final
@@ -543,11 +584,11 @@ public class DownloadCsvOrExcelUtil {
         return outputFile;
     }
 
-    private static void appendAllRowsInBatches(StreamingExcelContext context, DataList dataList, int totalRows, long exportStartedAt) {
+    private static void appendAllRowsInBatches(StreamingExcelContext context, DataList dataList, int totalRows, long exportStartedAt, int batchSize, ExportProgressListener progress) throws IOException {
         int start = 0;
         int batchNumber = 0;
         while (true) {
-            DataListCollection batch = dataList.getRows(DATA_BATCH_SIZE, start);
+            DataListCollection batch = dataList.getRows(batchSize, start);
             if (batch == null || batch.isEmpty()) {
                 break;
             }
@@ -557,10 +598,11 @@ public class DownloadCsvOrExcelUtil {
             int fetched = batch.size();
             batchNumber++;
             start += fetched;
+            progress.update("exporting", context.getExportedRowCount(), totalRows);
             logExportBatch("Excel", batchNumber, fetched, context.getExportedRowCount(), totalRows, exportStartedAt);
             // A short final batch proves that there are no more records and
             // avoids one additional database query.
-            if (fetched < DATA_BATCH_SIZE) {
+            if (fetched < batchSize) {
                 break;
             }
         }
@@ -614,8 +656,8 @@ public class DownloadCsvOrExcelUtil {
         return selectedRows != null ? selectedRows.size() : 0;
     }
 
-    private static String getExportStartMessage(String exportType, int totalRows, File outputFile) {
-        return "TEMP PERF - " + exportType + " export started: totalRows=" + totalRows + ", dataBatchSize=" + DATA_BATCH_SIZE + ", sxssfRowWindow=" + SXSSF_ROW_WINDOW + ", usedHeapMB=" + getUsedHeapMB() + ", maxHeapMB=" + getMaxHeapMB() + ", output=" + outputFile.getPath();
+    private static String getExportStartMessage(String exportType, int totalRows, File outputFile, int batchSize) {
+        return "TEMP PERF - " + exportType + " export started: totalRows=" + totalRows + ", dataBatchSize=" + batchSize + ", sxssfRowWindow=" + SXSSF_ROW_WINDOW + ", usedHeapMB=" + getUsedHeapMB() + ", maxHeapMB=" + getMaxHeapMB() + ", output=" + outputFile.getPath();
     }
 
     private static void logExportBatch(String exportType, int batchNumber, int fetchedRows, long processedRows, int totalRows, long exportStartedAt) {

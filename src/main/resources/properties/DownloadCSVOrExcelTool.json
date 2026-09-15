@@ -29,6 +29,13 @@
                 "required": "True"
             },
             {
+                "name": "dataBatchSize",
+                "label": "@@tool.downloadCSVOrExcel.dataBatchSize@@",
+                "type": "textfield",
+                "value": "2000",
+                "description": "@@tool.downloadCSVOrExcel.dataBatchSize.desc@@"
+            },
+            {
                 "name": "delimiter",
                 "label": "@@tool.downloadCSVOrExcel.delimiter@@",
                 "control_field": "downloadAs",
