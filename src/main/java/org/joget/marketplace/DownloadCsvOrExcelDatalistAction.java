@@ -122,6 +122,11 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
         String exportEncrypt = getPropertyString("exportEncrypt");
         String exportNumeric = getPropertyString("exportNumeric");
         Object[] selectedNumericColumn = (Object[]) properties.get("selectedNumericColumn");
+        final DownloadCsvOrExcelUtil.HeaderStyle headerStyle = DownloadCsvOrExcelUtil.HeaderStyle.of(
+                getPropertyString("headerBackgroundColor"), getPropertyString("headerFontColor"),
+                getPropertyString("headerBold"), getPropertyString("headerItalic"),
+                getPropertyString("headerFontName"), getPropertyString("headerFontSize"),
+                getPropertyString("headerAlignment"));
 
         // only allow POST
         DataListActionResult result = new DataListActionResult();
@@ -187,7 +192,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                                      * uses SXSSFWorkbook temporary files.
                                      */
                                     DataListCollection selectedRows = getSelectedRowsForExport(dataList, rowKeys);
-                                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, batchSize, progress::update);
+                                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, headerStyle, batchSize, progress::update);
 
                                     if (storeToForm) {
                                         progress.stage("storing");
@@ -223,7 +228,7 @@ public class DownloadCsvOrExcelDatalistAction extends DataListActionDefault impl
                         File tempFolder = new File(FileManager.getBaseDirectory(), UuidGenerator.getInstance().getUuid());
                         File excelFile = new File(tempFolder, excelFileName);
                         try {
-                            DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, batchSize);
+                            DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, excelFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, headerStyle, batchSize);
                             if (storeToForm) {
                                 DownloadCsvOrExcelUtil.storeGeneratedFileToForm(excelFile, formDefId, fileFieldId);
                             } else {

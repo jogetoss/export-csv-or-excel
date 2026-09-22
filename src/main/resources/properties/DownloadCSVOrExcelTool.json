@@ -172,6 +172,95 @@
                 "type": "textarea"
             },
             {
+                "label": "@@tool.downloadCSVOrExcel.headerStyleSetting@@",
+                "type": "header",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerBackgroundColor",
+                "label": "@@tool.downloadCSVOrExcel.headerBackgroundColor@@",
+                "type": "color",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerFontColor",
+                "label": "@@tool.downloadCSVOrExcel.headerFontColor@@",
+                "type": "color",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerBold",
+                "label": "@@tool.downloadCSVOrExcel.headerBold@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerItalic",
+                "label": "@@tool.downloadCSVOrExcel.headerItalic@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@tool.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@tool.downloadCSVOrExcel.yes@@"
+                    }],
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerFontName",
+                "label": "@@tool.downloadCSVOrExcel.headerFontName@@",
+                "type": "textfield",
+                "description": "@@tool.downloadCSVOrExcel.headerFontName.desc@@",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerFontSize",
+                "label": "@@tool.downloadCSVOrExcel.headerFontSize@@",
+                "type": "textfield",
+                "description": "@@tool.downloadCSVOrExcel.headerFontSize.desc@@",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerAlignment",
+                "label": "@@tool.downloadCSVOrExcel.headerAlignment@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "",
+                        "label": "@@tool.downloadCSVOrExcel.default@@"
+                    },
+                    {
+                        "value": "left",
+                        "label": "@@tool.downloadCSVOrExcel.left@@"
+                    },
+                    {
+                        "value": "center",
+                        "label": "@@tool.downloadCSVOrExcel.center@@"
+                    },
+                    {
+                        "value": "right",
+                        "label": "@@tool.downloadCSVOrExcel.right@@"
+                    }],
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
                 "label": "@@tool.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },

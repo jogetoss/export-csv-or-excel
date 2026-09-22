@@ -85,6 +85,11 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
         String exportEncrypt = getPropertyString("exportEncrypt");
         String exportNumeric = getPropertyString("exportNumeric");
         Object[] selectedNumericColumn = (Object[]) properties.get("selectedNumericColumn");
+        final DownloadCsvOrExcelUtil.HeaderStyle headerStyle = DownloadCsvOrExcelUtil.HeaderStyle.of(
+                getPropertyString("headerBackgroundColor"), getPropertyString("headerFontColor"),
+                getPropertyString("headerBold"), getPropertyString("headerItalic"),
+                getPropertyString("headerFontName"), getPropertyString("headerFontSize"),
+                getPropertyString("headerAlignment"));
 
         HttpServletRequest request = WorkflowUtil.getHttpServletRequest();
         if (request != null && !"POST".equalsIgnoreCase(request.getMethod())) {
@@ -111,7 +116,7 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
                     outputFile = DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, new File(filePath, filename), true, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt, batchSize);
                 } else {
                     String filename =renameFile.equalsIgnoreCase("true") ? fileName + ".xlsx" : "report.xlsx";
-                    outputFile = DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, new File(filePath, filename), true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, batchSize);
+                    outputFile = DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, new File(filePath, filename), true, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, headerStyle, batchSize);
                 }
                 if (outputFile.exists()) {
                     LogUtil.info(getClassName(), "File saved to: " + filePath);
@@ -127,7 +132,7 @@ public class DownloadCsvOrExcelTool extends DefaultApplicationPlugin {
                 if (getDownloadAs()) {
                     DownloadCsvOrExcelUtil.generateStreamingCSVFile(dataList, selectedRows, rowKeys, generatedFile, false, delimiter, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportEncrypt, batchSize);
                 } else {
-                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, generatedFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, batchSize);
+                    DownloadCsvOrExcelUtil.generateStreamingExcelFile(dataList, selectedRows, rowKeys, generatedFile, false, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, selectedNumericColumn, headerStyle, batchSize);
                 }
                 DownloadCsvOrExcelUtil.storeGeneratedFileToForm(generatedFile, formDefId, fileFieldId);
             } catch (IOException e) {

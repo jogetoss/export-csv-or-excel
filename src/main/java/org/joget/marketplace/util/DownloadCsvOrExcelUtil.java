@@ -4,6 +4,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.util.DefaultTempFileCreationStrategy;
+import org.apache.poi.util.TempFile;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.joget.apps.app.service.AppUtil;
@@ -55,7 +57,12 @@ import org.apache.poi.ss.usermodel.ClientAnchor;
 import org.apache.poi.ss.usermodel.CreationHelper;
 import org.apache.poi.ss.usermodel.DataFormat;
 import org.apache.poi.ss.usermodel.Drawing;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Picture;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
+import org.apache.poi.xssf.usermodel.XSSFFont;
 import org.apache.tika.Tika;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.app.service.AppService;
@@ -108,6 +115,115 @@ public class DownloadCsvOrExcelUtil {
 
     private static final Map<Workbook, CellStyle> NUMERIC_STYLE_CACHE = new java.util.WeakHashMap<>();
     private static final Map<Workbook, DataFormat> DATA_FORMAT_CACHE = new java.util.WeakHashMap<>();
+    private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("^#?([0-9a-fA-F]{6})$");
+
+    /**
+     * Header formatting options configured on the Datalist Action / Tool. Only Excel
+     * exports can carry cell styling; CSV is plain text and always ignores this.
+     */
+    public static final class HeaderStyle {
+        private final String backgroundColor;
+        private final String fontColor;
+        private final boolean bold;
+        private final boolean italic;
+        private final String fontName;
+        private final Short fontSize;
+        private final String alignment;
+
+        private HeaderStyle(String backgroundColor, String fontColor, boolean bold, boolean italic, String fontName, Short fontSize, String alignment) {
+            this.backgroundColor = backgroundColor;
+            this.fontColor = fontColor;
+            this.bold = bold;
+            this.italic = italic;
+            this.fontName = fontName;
+            this.fontSize = fontSize;
+            this.alignment = alignment;
+        }
+
+        /** Parses the raw plugin property strings. Invalid/blank values are dropped rather than failing the export. */
+        public static HeaderStyle of(String backgroundColor, String fontColor, String bold, String italic, String fontName, String fontSize, String alignment) {
+            Short parsedSize = null;
+            if (fontSize != null && !fontSize.trim().isEmpty()) {
+                try {
+                    short size = Short.parseShort(fontSize.trim());
+                    if (size > 0) {
+                        parsedSize = size;
+                    }
+                } catch (NumberFormatException e) {
+                    // Ignore invalid font size and fall back to the workbook default.
+                }
+            }
+            return new HeaderStyle(
+                    normalizeHexColor(backgroundColor),
+                    normalizeHexColor(fontColor),
+                    "true".equalsIgnoreCase(bold),
+                    "true".equalsIgnoreCase(italic),
+                    fontName != null && !fontName.trim().isEmpty() ? fontName.trim() : null,
+                    parsedSize,
+                    alignment != null ? alignment.trim().toLowerCase() : null
+            );
+        }
+
+        private static String normalizeHexColor(String color) {
+            if (color == null) {
+                return null;
+            }
+            java.util.regex.Matcher matcher = HEX_COLOR_PATTERN.matcher(color.trim());
+            return matcher.matches() ? matcher.group(1) : null;
+        }
+
+        /** No fields are configured; the workbook default header appearance is used. */
+        public boolean isEmpty() {
+            return backgroundColor == null && fontColor == null && !bold && !italic && fontName == null && fontSize == null && (alignment == null || alignment.isEmpty());
+        }
+    }
+
+    /** Builds the header CellStyle once per workbook. Returns null when no styling was configured. */
+    private static CellStyle createHeaderCellStyle(Workbook workbook, HeaderStyle headerStyle) {
+        if (headerStyle == null || headerStyle.isEmpty()) {
+            return null;
+        }
+
+        // SXSSFWorkbook#createCellStyle()/createFont() delegate directly to the
+        // underlying XSSFWorkbook, so the returned instances are always XSSF types.
+        XSSFCellStyle style = (XSSFCellStyle) workbook.createCellStyle();
+        XSSFFont font = (XSSFFont) workbook.createFont();
+
+        if (headerStyle.backgroundColor != null) {
+            style.setFillForegroundColor(new XSSFColor(hexToRgb(headerStyle.backgroundColor), null));
+            style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        }
+        if (headerStyle.fontColor != null) {
+            font.setColor(new XSSFColor(hexToRgb(headerStyle.fontColor), null));
+        }
+        font.setBold(headerStyle.bold);
+        font.setItalic(headerStyle.italic);
+        if (headerStyle.fontName != null) {
+            font.setFontName(headerStyle.fontName);
+        }
+        if (headerStyle.fontSize != null) {
+            font.setFontHeightInPoints(headerStyle.fontSize);
+        }
+        style.setFont(font);
+
+        if ("left".equals(headerStyle.alignment)) {
+            style.setAlignment(HorizontalAlignment.LEFT);
+        } else if ("center".equals(headerStyle.alignment)) {
+            style.setAlignment(HorizontalAlignment.CENTER);
+        } else if ("right".equals(headerStyle.alignment)) {
+            style.setAlignment(HorizontalAlignment.RIGHT);
+        }
+
+        return style;
+    }
+
+    private static byte[] hexToRgb(String hex) {
+        return new byte[]{
+                (byte) Integer.parseInt(hex.substring(0, 2), 16),
+                (byte) Integer.parseInt(hex.substring(2, 4), 16),
+                (byte) Integer.parseInt(hex.substring(4, 6), 16)
+        };
+    }
 
     private static CellStyle getNumericStyle(Workbook wb) {
         CellStyle style = NUMERIC_STYLE_CACHE.get(wb);
@@ -511,18 +627,18 @@ public class DownloadCsvOrExcelUtil {
      *                     caller already supplied a unique background-job path
      */
     public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) throws IOException {
-        return generateStreamingExcelFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns, DATA_BATCH_SIZE);
+        return generateStreamingExcelFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns, null, DATA_BATCH_SIZE);
     }
 
-    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, int batchSize) throws IOException {
-        return generateStreamingExcelFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns, batchSize, (stage, processed, total) -> {});
+    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, HeaderStyle headerStyle, int batchSize) throws IOException {
+        return generateStreamingExcelFile(dataList, selectedRows, rowKeys, requestedFile, makeUnique, headerDecorator, downloadAllWhenNoneSelected, footerDecorator, includeCustomHeader, footerHeader, includeCustomFooter, exportImages, exportEncrypt, exportNumeric, gridColumns, headerStyle, batchSize, (stage, processed, total) -> {});
     }
 
     public interface ExportProgressListener {
         void update(String stage, long processed, int total) throws IOException;
     }
 
-    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, int batchSize, ExportProgressListener progress) throws IOException {
+    public static File generateStreamingExcelFile(DataList dataList, DataListCollection selectedRows, String[] rowKeys, File requestedFile, boolean makeUnique, String headerDecorator, String downloadAllWhenNoneSelected, String footerDecorator, String includeCustomHeader, String footerHeader, String includeCustomFooter, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, HeaderStyle headerStyle, int batchSize, ExportProgressListener progress) throws IOException {
         batchSize = batchSize > 0 ? batchSize : DATA_BATCH_SIZE;
 
         long exportStartedAt = System.currentTimeMillis();
@@ -533,6 +649,7 @@ public class DownloadCsvOrExcelUtil {
             throw new IOException("Unable to create export directory: " + parent);
         }
 
+        ensurePoiTempDirectoryConfigured();
         SXSSFWorkbook workbook = new SXSSFWorkbook(SXSSF_ROW_WINDOW);
         // Compress POI's XML temporary files to reduce disk usage for 1M+ rows.
         workbook.setCompressTempFiles(true);
@@ -542,7 +659,7 @@ public class DownloadCsvOrExcelUtil {
         long processedRows = 0;
         try {
             progress.update("exporting", 0, totalRows);
-            StreamingExcelContext context = new StreamingExcelContext(workbook, dataList, headerDecorator, includeCustomHeader, exportImages, exportEncrypt, exportNumeric, gridColumns);
+            StreamingExcelContext context = new StreamingExcelContext(workbook, dataList, headerDecorator, includeCustomHeader, exportImages, exportEncrypt, exportNumeric, gridColumns, headerStyle);
 
             if (rowKeys != null && rowKeys.length > 0) {
                 // Selected-row exports normally contain a relatively small set.
@@ -682,6 +799,37 @@ public class DownloadCsvOrExcelUtil {
         return Runtime.getRuntime().maxMemory() / (1024 * 1024);
     }
 
+    private static volatile boolean poiTempDirConfigured = false;
+
+    /**
+     * SXSSFWorkbook spills rows to disk under java.io.tmpdir by default (e.g.
+     * <catalina base>/temp/poifiles). Under Joget's MultiTenantSecurityManager
+     * that directory is outside the app's sandboxed profile base directory and
+     * writes to it are rejected with a SecurityException. Redirect POI's temp
+     * file strategy to a subfolder of FileManager.getBaseDirectory(), which
+     * this plugin already writes its own export files to without issue.
+     */
+    private static void ensurePoiTempDirectoryConfigured() {
+        if (poiTempDirConfigured) {
+            return;
+        }
+        synchronized (DownloadCsvOrExcelUtil.class) {
+            if (poiTempDirConfigured) {
+                return;
+            }
+            try {
+                File poiTempDir = new File(FileManager.getBaseDirectory(), "poi-tmp");
+                if (!poiTempDir.isDirectory() && !poiTempDir.mkdirs()) {
+                    LogUtil.warn(getClassName(), "Unable to create POI temp directory: " + poiTempDir);
+                }
+                TempFile.setTempFileCreationStrategy(new DefaultTempFileCreationStrategy(poiTempDir));
+            } catch (Exception e) {
+                LogUtil.error(getClassName(), e, "Failed to configure POI temp file directory; falling back to the JVM default");
+            }
+            poiTempDirConfigured = true;
+        }
+    }
+
     private static final class StreamingExcelContext {
         private final SXSSFWorkbook workbook;
         private final DataList dataList;
@@ -693,6 +841,7 @@ public class DownloadCsvOrExcelUtil {
         private final String exportEncrypt;
         private final Set<String> numericColumns;
         private final CellStyle numericStyle;
+        private final CellStyle headerCellStyle;
         private final AppDefinition appDef;
         private Sheet sheet;
         private StreamingImageSupport imageSupport;
@@ -700,7 +849,7 @@ public class DownloadCsvOrExcelUtil {
         private int rowNumber;
         private long exportedRowCount;
 
-        private StreamingExcelContext(SXSSFWorkbook workbook, DataList dataList, String headerDecorator, String includeCustomHeader, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns) {
+        private StreamingExcelContext(SXSSFWorkbook workbook, DataList dataList, String headerDecorator, String includeCustomHeader, String exportImages, String exportEncrypt, String exportNumeric, Object[] gridColumns, HeaderStyle headerStyle) {
             this.workbook = workbook;
             this.dataList = dataList;
             this.columns = getExportColumns(dataList);
@@ -714,6 +863,7 @@ public class DownloadCsvOrExcelUtil {
             this.exportEncrypt = exportEncrypt;
             this.numericColumns = getNumericColumns(exportNumeric, gridColumns);
             this.numericStyle = createStreamingNumericStyle(workbook);
+            this.headerCellStyle = createHeaderCellStyle(workbook, headerStyle);
             this.appDef = AppUtil.getCurrentAppDefinition();
             createSheet();
         }
@@ -737,7 +887,11 @@ public class DownloadCsvOrExcelUtil {
 
             Row headerRow = sheet.createRow(rowNumber++);
             for (int i = 0; i < headers.length; i++) {
-                headerRow.createCell(i).setCellValue(headers[i]);
+                Cell headerCell = headerRow.createCell(i);
+                headerCell.setCellValue(headers[i]);
+                if (headerCellStyle != null) {
+                    headerCell.setCellStyle(headerCellStyle);
+                }
             }
         }
 
@@ -784,7 +938,11 @@ public class DownloadCsvOrExcelUtil {
             if (getFooter(footerHeader)) {
                 Row footerHeaderRow = sheet.createRow(rowNumber++);
                 for (int i = 0; i < headers.length; i++) {
-                    footerHeaderRow.createCell(i).setCellValue(headers[i]);
+                    Cell footerHeaderCell = footerHeaderRow.createCell(i);
+                    footerHeaderCell.setCellValue(headers[i]);
+                    if (headerCellStyle != null) {
+                        footerHeaderCell.setCellStyle(headerCellStyle);
+                    }
                 }
             }
             if (includeCustomFooter(includeCustomFooter)) {

@@ -187,6 +187,95 @@
                 "control_value": "true"
             },
             {
+                "label": "@@datalist.downloadCSVOrExcel.headerStyleSetting@@",
+                "type": "header",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerBackgroundColor",
+                "label": "@@datalist.downloadCSVOrExcel.headerBackgroundColor@@",
+                "type": "color",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerFontColor",
+                "label": "@@datalist.downloadCSVOrExcel.headerFontColor@@",
+                "type": "color",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerBold",
+                "label": "@@datalist.downloadCSVOrExcel.headerBold@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerItalic",
+                "label": "@@datalist.downloadCSVOrExcel.headerItalic@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "false",
+                        "label": "@@datalist.downloadCSVOrExcel.no@@"
+                    },
+                    {
+                        "value": "true",
+                        "label": "@@datalist.downloadCSVOrExcel.yes@@"
+                    }],
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerFontName",
+                "label": "@@datalist.downloadCSVOrExcel.headerFontName@@",
+                "type": "textfield",
+                "description": "@@datalist.downloadCSVOrExcel.headerFontName.desc@@",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerFontSize",
+                "label": "@@datalist.downloadCSVOrExcel.headerFontSize@@",
+                "type": "textfield",
+                "description": "@@datalist.downloadCSVOrExcel.headerFontSize.desc@@",
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
+                "name": "headerAlignment",
+                "label": "@@datalist.downloadCSVOrExcel.headerAlignment@@",
+                "type": "selectbox",
+                "options": [{
+                        "value": "",
+                        "label": "@@datalist.downloadCSVOrExcel.default@@"
+                    },
+                    {
+                        "value": "left",
+                        "label": "@@datalist.downloadCSVOrExcel.left@@"
+                    },
+                    {
+                        "value": "center",
+                        "label": "@@datalist.downloadCSVOrExcel.center@@"
+                    },
+                    {
+                        "value": "right",
+                        "label": "@@datalist.downloadCSVOrExcel.right@@"
+                    }],
+                "control_field": "downloadAs",
+                "control_value": "excel"
+            },
+            {
                 "label": "@@datalist.downloadCSVOrExcel.fileSetting@@",
                 "type": "header"
             },
